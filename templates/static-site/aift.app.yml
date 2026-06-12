@@ -1,0 +1,13 @@
+name: static-site-template
+repo: https://github.com/AIFreedomTrustFederation/static-site-template
+domain: static.aifreedomtrust.com
+branch: main
+framework: static
+build:
+  output: .
+runtime:
+  type: static
+  healthcheck: /
+preview:
+  enabled: true
+  domain_pattern: "{branch}.preview.aifreedomtrust.com"
