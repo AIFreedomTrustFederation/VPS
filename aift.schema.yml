@@ -1,0 +1,125 @@
+# AI Freedom Trust App Configuration Schema
+# File name expected in app repositories: aift.app.yml
+
+schema: aift.app.v1
+required:
+  - name
+  - branch
+  - framework
+  - runtime
+
+fields:
+  name:
+    type: string
+    description: Unique app name used by the VPS registry and deployment commands.
+    example: handyman-site
+
+  repo:
+    type: string
+    description: GitHub repository URL for the app.
+    example: https://github.com/AIFreedomTrustFederation/handyman-site
+
+  domain:
+    type: string
+    description: Primary production domain or subdomain.
+    example: handyman.aifreedomtrust.com
+
+  branch:
+    type: string
+    default: main
+    description: Git branch used for production deployment.
+
+  framework:
+    type: enum
+    allowed:
+      - auto
+      - static
+      - vite
+      - react
+      - nextjs
+      - node
+      - express
+      - astro
+      - sveltekit
+      - vue
+      - nuxt
+      - fastapi
+      - docker
+      - docker-compose
+    description: Framework or deployment type. Use auto when the builder should detect it.
+
+  build:
+    type: object
+    fields:
+      install:
+        type: string
+        example: npm ci
+      command:
+        type: string
+        example: npm run build
+      output:
+        type: string
+        example: dist
+      start:
+        type: string
+        example: npm start
+
+  runtime:
+    type: object
+    required:
+      - type
+    fields:
+      type:
+        type: enum
+        allowed:
+          - static
+          - node
+          - python
+          - docker
+          - docker-compose
+      port:
+        type: integer
+        example: 3000
+      healthcheck:
+        type: string
+        default: /
+
+  env:
+    type: object
+    description: Non-secret defaults only. Real secrets must live in VPS/PaaS environment variables.
+
+  compose:
+    type: object
+    fields:
+      file:
+        type: string
+        default: docker-compose.yml
+
+  preview:
+    type: object
+    fields:
+      enabled:
+        type: boolean
+        default: true
+      domain_pattern:
+        type: string
+        example: "{branch}.preview.aifreedomtrust.com"
+
+  backups:
+    type: object
+    fields:
+      enabled:
+        type: boolean
+        default: true
+      paths:
+        type: array
+        example:
+          - uploads
+          - storage
+
+rules:
+  - Never commit production secrets.
+  - Always include .env.example for required environment variables.
+  - Prefer Dockerfile or deterministic build commands.
+  - Every app should expose a healthcheck route when possible.
+  - Production deployments must use HTTPS.
