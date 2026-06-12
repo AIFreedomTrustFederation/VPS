@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+AIFT_ROOT="${AIFT_ROOT:-/opt/aift}"
+REGISTRY="${AIFT_ROOT}/registry/apps.yml"
+
+usage() {
+  cat <<'EOF'
+AI Freedom Trust VPS CLI
+
+Usage:
+  aift status
+  aift apps
+  aift logs <app>
+  aift deploy <app>
+  aift rebuild <app>
+  aift rollback <app>
+  aift backup
+
+This is the first CLI skeleton. Commands will be wired into the selected PaaS controller, Docker, and app registry as the platform matures.
+EOF
+}
+
+status() {
+  echo "AIFT root: ${AIFT_ROOT}"
+  if command -v docker >/dev/null 2>&1; then
+    docker --version
+    docker compose version || true
+  else
+    echo "Docker not installed."
+  fi
+
+  if [[ -f "${REGISTRY}" ]]; then
+    echo "Registry: ${REGISTRY}"
+  else
+    echo "Registry not found: ${REGISTRY}"
+  fi
+}
+
+apps() {
+  if [[ -f "${REGISTRY}" ]]; then
+    cat "${REGISTRY}"
+  else
+    echo "No app registry found at ${REGISTRY}"
+    exit 1
+  fi
+}
+
+logs() {
+  local app="${1:-}"
+  if [[ -z "${app}" ]]; then
+    echo "Missing app name."
+    exit 1
+  fi
+
+  local log_dir="${AIFT_ROOT}/logs/${app}"
+  if [[ -d "${log_dir}" ]]; then
+    find "${log_dir}" -type f -maxdepth 1 -print -exec tail -n 80 {} \;
+  else
+    echo "No logs found for ${app} at ${log_dir}"
+  fi
+}
+
+not_implemented() {
+  local command="$1"
+  cat <<EOF
+'aift ${command}' is reserved and not wired yet.
+
+Current next step:
+- Deploy/rebuild through Coolify or Dokploy first.
+- Then wire this CLI to the selected controller API and /opt/aift registry.
+EOF
+}
+
+main() {
+  local command="${1:-}"
+  shift || true
+
+  case "${command}" in
+    status) status ;;
+    apps) apps ;;
+    logs) logs "${1:-}" ;;
+    deploy) not_implemented deploy ;;
+    rebuild) not_implemented rebuild ;;
+    rollback) not_implemented rollback ;;
+    backup) not_implemented backup ;;
+    -h|--help|help|"") usage ;;
+    *) echo "Unknown command: ${command}"; usage; exit 1 ;;
+  esac
+}
+
+main "$@"
