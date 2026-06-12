@@ -1,0 +1,99 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #07060a;
+  color: #fff7ea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(226, 185, 82, 0.25), transparent 28rem),
+    radial-gradient(circle at 90% 20%, rgba(122, 44, 255, 0.18), transparent 22rem),
+    linear-gradient(145deg, #07060a 0%, #15101e 55%, #09070d 100%);
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 4rem);
+}
+
+.hero-card {
+  width: min(100%, 860px);
+  padding: clamp(1.8rem, 7vw, 5.5rem);
+  border: 1px solid rgba(226, 185, 82, 0.35);
+  border-radius: clamp(1.4rem, 5vw, 3rem);
+  background: linear-gradient(145deg, rgba(17, 13, 23, 0.92), rgba(8, 7, 12, 0.72));
+  box-shadow: 0 2.5rem 7rem rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(20px);
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: #e2b952;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  max-width: 10ch;
+  font-size: clamp(3rem, 15vw, 8rem);
+  line-height: 0.88;
+  letter-spacing: -0.08em;
+}
+
+.lead {
+  max-width: 60ch;
+  margin: 1.5rem 0 0;
+  color: rgba(255, 247, 234, 0.76);
+  font-size: clamp(1rem, 3.7vw, 1.35rem);
+  line-height: 1.7;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 2rem;
+}
+
+.status-grid div {
+  padding: 1rem;
+  border: 1px solid rgba(255, 247, 234, 0.1);
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.status-grid span,
+.status-grid strong {
+  display: block;
+}
+
+.status-grid span {
+  color: rgba(255, 247, 234, 0.52);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.status-grid strong {
+  margin-top: 0.35rem;
+  color: #fff7ea;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 560px) {
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}
