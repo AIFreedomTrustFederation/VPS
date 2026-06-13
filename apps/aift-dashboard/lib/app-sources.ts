@@ -36,12 +36,49 @@ export function getAppSourceFilePath() {
   return path.join(getAppSourceHome(), 'app-sources', 'sources.json');
 }
 
+function getEngineSourceFilePath() {
+  return path.join(getAppSourceHome(), 'engine', 'app-sources', 'records.json');
+}
+
+function readEngineSources(): AppSource[] {
+  const filePath = getEngineSourceFilePath();
+  mkdirSync(path.dirname(filePath), { recursive: true });
+
+  if (!existsSync(filePath)) {
+    writeFileSync(filePath, JSON.stringify({ records: [] }, null, 2));
+  }
+
+  try {
+    const data = JSON.parse(readFileSync(filePath, 'utf8')) as { records?: AppSource[] };
+    return Array.isArray(data.records) ? data.records : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeEngineSources(records: AppSource[]) {
+  const filePath = getEngineSourceFilePath();
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, JSON.stringify({ records }, null, 2));
+}
+
+function mirrorSourceToEngine(source: AppSource) {
+  const records = readEngineSources();
+  const index = records.findIndex((record) => record.id === source.id || record.repo.toLowerCase() === source.repo.toLowerCase());
+
+  if (index >= 0) records[index] = source;
+  else records.unshift(source);
+
+  writeEngineSources(records);
+}
+
 export function ensureAppSourceFile() {
   const filePath = getAppSourceFilePath();
   mkdirSync(path.dirname(filePath), { recursive: true });
 
   if (!existsSync(filePath)) {
     writeFileSync(filePath, JSON.stringify({ sources: seedSources }, null, 2));
+    seedSources.forEach(mirrorSourceToEngine);
   }
 
   return filePath;
@@ -51,7 +88,9 @@ export function readAppSources(): AppSource[] {
   const filePath = ensureAppSourceFile();
   try {
     const data = JSON.parse(readFileSync(filePath, 'utf8')) as AppSourceFile;
-    return Array.isArray(data.sources) ? data.sources : [];
+    const sources = Array.isArray(data.sources) ? data.sources : [];
+    sources.forEach(mirrorSourceToEngine);
+    return sources;
   } catch {
     return [];
   }
@@ -60,6 +99,7 @@ export function readAppSources(): AppSource[] {
 export function writeAppSources(sources: AppSource[]) {
   const filePath = ensureAppSourceFile();
   writeFileSync(filePath, JSON.stringify({ sources }, null, 2));
+  sources.forEach(mirrorSourceToEngine);
 }
 
 export function parseGitHubRepoUrl(input: string) {
@@ -90,6 +130,7 @@ export function addAppSource(inputUrl: string) {
   const sources = readAppSources();
   const existing = sources.find((source) => source.repo.toLowerCase() === parsed.repo.toLowerCase());
   if (existing) {
+    mirrorSourceToEngine(existing);
     return { ok: true as const, source: existing, created: false };
   }
 
@@ -101,5 +142,6 @@ export function addAppSource(inputUrl: string) {
   };
 
   writeAppSources([source, ...sources]);
+  mirrorSourceToEngine(source);
   return { ok: true as const, source, created: true };
 }
