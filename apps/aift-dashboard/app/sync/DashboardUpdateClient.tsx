@@ -23,6 +23,17 @@ export function DashboardUpdateClient() {
   const [busy, setBusy] = useState('');
   const [output, setOutput] = useState<Output | null>(null);
 
+  async function syncHandshake() {
+    setBusy('handshake');
+    setOutput({ title: 'Sync handshake', text: `Scheduling full sync handshake. Handoff URL: ${handoffUrl}`, ok: null });
+    const data = await runAction('sync-handshake');
+    setOutput({ title: data.ok ? 'Sync handshake scheduled' : 'Sync handshake needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
+    if (data.ok) {
+      setTimeout(() => { window.location.href = handoffUrl; }, 650);
+    }
+    setBusy('');
+  }
+
   async function updateFiles() {
     setBusy('update');
     setOutput({ title: 'Updating dashboard files', text: 'Checking GitHub and updating the local AIFT VPS checkout...', ok: null });
@@ -42,9 +53,10 @@ export function DashboardUpdateClient() {
   return (
     <section className="panel-card">
       <h2>Dashboard update</h2>
-      <p className="muted">Use these buttons to update the whole AIFT dashboard. The handoff page stays available while the dashboard process restarts.</p>
+      <p className="muted">Use one handshake button to update files, restart the whole dashboard, and move to the handoff page while the main app rebuilds.</p>
       <div className="toolbar">
-        <a className="btn complete" href={handoffUrl}>Open handoff page</a>
+        <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={syncHandshake}>{busy === 'handshake' ? 'Starting handshake...' : 'Sync handshake'}</button>
+        <a className="btn secondary" href={handoffUrl}>Open handoff page</a>
         <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={updateFiles}>{busy === 'update' ? 'Updating...' : 'Update dashboard files'}</button>
         <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={restartDashboard}>{busy === 'restart' ? 'Restarting...' : 'Restart dashboard'}</button>
         <a className="btn secondary" href="/logs">Open logs</a>
