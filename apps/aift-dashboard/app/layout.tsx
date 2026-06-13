@@ -17,6 +17,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <nav className="nav-scroll">
             <a href="/apps">Apps</a>
             <a href="/app-profiles">Profiles</a>
+            <a href="/readiness">Readiness</a>
             <a href="/templates">Templates</a>
             <a href="/builds">Builds</a>
             <a href="/deployments">Deployments</a>
