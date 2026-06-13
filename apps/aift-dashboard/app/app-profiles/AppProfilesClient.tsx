@@ -24,6 +24,7 @@ type ProfileResult = {
 
 export function AppProfilesClient() {
   const [running, setRunning] = useState(false);
+  const [repoUrl, setRepoUrl] = useState('');
   const [results, setResults] = useState<ProfileResult[]>([]);
   const [message, setMessage] = useState('');
 
@@ -34,6 +35,43 @@ export function AppProfilesClient() {
     const data = await response.json();
     setResults(data.results ?? []);
     setMessage(data.ok ? `Generated ${data.count} profile(s).` : data.error || 'Profile generation failed.');
+    setRunning(false);
+  }
+
+  async function addSourceAndGenerate() {
+    if (!repoUrl.trim()) {
+      setMessage('Paste a GitHub repo URL first, or use Create app profiles for saved sources.');
+      return;
+    }
+
+    setRunning(true);
+    setMessage('Saving source...');
+    const saveResponse = await fetch('/api/app-sources', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: repoUrl.trim() }),
+    });
+    const saveData = await saveResponse.json();
+
+    if (!saveData.ok) {
+      setMessage(saveData.error || 'Could not save source.');
+      setRunning(false);
+      return;
+    }
+
+    setMessage('Source saved. Generating profile...');
+    const profileResponse = await fetch(`/api/app-sources/${saveData.source.id}/profile`, { method: 'POST' });
+    const profileData = await profileResponse.json();
+
+    if (!profileData.ok) {
+      setMessage(profileData.error || 'Could not generate profile.');
+      setRunning(false);
+      return;
+    }
+
+    setRepoUrl('');
+    setResults([{ profile: profileData.profile, workload: profileData.workload }, ...results.filter((item) => item.profile.id !== profileData.profile.id)]);
+    setMessage(`Profile ready for ${profileData.source.repo}.`);
     setRunning(false);
   }
 
@@ -57,8 +95,15 @@ export function AppProfilesClient() {
     <section className="panel-card">
       <h2>App profiles</h2>
       <p className="muted">Turn saved app sources into launch profiles with detected stack, commands, and workload records.</p>
+      <div className="stack-list">
+        <label className="row-card" style={{ display: 'grid', gap: '.6rem' }}>
+          <strong>GitHub repo URL</strong>
+          <input value={repoUrl} onChange={(event) => setRepoUrl(event.target.value)} placeholder="https://github.com/owner/repo" />
+        </label>
+      </div>
       <div className="toolbar">
-        <button className="btn" type="button" disabled={running} onClick={generateAll}>{running ? 'Generating...' : 'Create app profiles'}</button>
+        <button className="btn" type="button" disabled={running} onClick={addSourceAndGenerate}>{running ? 'Working...' : 'Save repo and create profile'}</button>
+        <button className="btn secondary" type="button" disabled={running} onClick={generateAll}>{running ? 'Generating...' : 'Create app profiles'}</button>
         <button className="btn secondary" type="button" disabled={running} onClick={loadCollections}>Reload profiles</button>
       </div>
       {message && <p className="muted">{message}</p>}
@@ -74,10 +119,10 @@ export function AppProfilesClient() {
               </div>
               <p className="footer-note">{item.profile.notes?.join(' ')}</p>
               <div className="stack-list">
-                <div className="row-card"><strong>Install</strong><span>{item.profile.install_command || 'Not detected'}</span></div>
-                <div className="row-card"><strong>Build</strong><span>{item.profile.build_command || 'Not detected'}</span></div>
-                <div className="row-card"><strong>Dev</strong><span>{item.profile.dev_command || 'Not detected'}</span></div>
-                <div className="row-card"><strong>Verify</strong><span>{item.profile.verify_command || 'Not detected'}</span></div>
+                <div className="row-card" style={{ gap: '.75rem' }}><strong>Install:</strong><span>{item.profile.install_command || 'Not detected'}</span></div>
+                <div className="row-card" style={{ gap: '.75rem' }}><strong>Build:</strong><span>{item.profile.build_command || 'Not detected'}</span></div>
+                <div className="row-card" style={{ gap: '.75rem' }}><strong>Dev:</strong><span>{item.profile.dev_command || 'Not detected'}</span></div>
+                <div className="row-card" style={{ gap: '.75rem' }}><strong>Verify:</strong><span>{item.profile.verify_command || 'Not detected'}</span></div>
               </div>
             </div>
             <span className={`status ${item.profile.profile_ready ? 'successful' : 'pending'}`}>{item.profile.profile_ready ? 'Ready' : 'Review'}</span>
