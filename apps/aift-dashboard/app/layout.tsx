@@ -1,6 +1,5 @@
 import './globals.css';
 import './webai/webai-mobile.css';
-import { TopMenu } from './TopMenu';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
@@ -34,7 +33,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <a href="/connect-node">Node</a>
             <a href="/settings">Settings</a>
           </nav>
-          <TopMenu />
         </header>
         {children}
       </body>
