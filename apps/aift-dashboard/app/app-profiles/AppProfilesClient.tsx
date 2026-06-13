@@ -19,17 +19,16 @@ type ProfileResult = {
     id: string;
     status: string;
     notes: string;
+    workspace_path?: string;
+    log_path?: string;
   };
 };
-
-type LinkMap = Record<string, string>;
 
 export function AppProfilesClient() {
   const [running, setRunning] = useState(false);
   const [repoUrl, setRepoUrl] = useState('');
   const [results, setResults] = useState<ProfileResult[]>([]);
   const [message, setMessage] = useState('');
-  const [links, setLinks] = useState<LinkMap>({});
 
   async function generateAll() {
     setRunning(true);
@@ -78,23 +77,24 @@ export function AppProfilesClient() {
     setRunning(false);
   }
 
-  async function assignLaunchLink(profile: ProfileResult['profile']) {
+  async function prepareWorkspace(profile: ProfileResult['profile']) {
     setRunning(true);
-    setMessage('Assigning launch link...');
-    const response = await fetch('/api/app-links', {
+    setMessage('Preparing real local workspace...');
+    const response = await fetch('/api/workspaces/prepare', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ profileId: profile.id }),
     });
     const data = await response.json();
+
     if (!data.ok) {
-      setMessage(data.error || 'Could not assign launch link.');
+      setMessage(data.error || 'Workspace preparation failed. Check logs.');
       setRunning(false);
       return;
     }
-    const href = data.link.href;
-    setLinks((current) => ({ ...current, [profile.id]: href }));
-    setMessage(`Launch link assigned: ${href}`);
+
+    setResults((current) => current.map((item) => item.profile.id === profile.id ? { ...item, workload: data.workspace } : item));
+    setMessage(`Workspace ready: ${data.workspace.workspace_path}`);
     setRunning(false);
   }
 
@@ -104,11 +104,6 @@ export function AppProfilesClient() {
     const data = await response.json();
     const profiles = data.collections?.app_profiles ?? [];
     const workloads = data.collections?.workloads ?? [];
-    const nextLinks: LinkMap = {};
-    workloads.forEach((item: { profile_id?: string; href?: string }) => {
-      if (item.profile_id && item.href) nextLinks[item.profile_id] = item.href;
-    });
-    setLinks(nextLinks);
     setResults(profiles.map((profile: ProfileResult['profile']) => ({
       profile,
       workload: workloads.find((item: ProfileResult['workload'] & { profile_id?: string }) => item.profile_id === profile.id) || { id: '', status: 'unknown', notes: '' },
@@ -136,9 +131,7 @@ export function AppProfilesClient() {
       </div>
       {message && <p className="muted">{message}</p>}
       <div className="app-list">
-        {results.length === 0 ? <div className="card metric"><span>No app profiles yet.</span><strong>0</strong></div> : results.map((item) => {
-          const href = links[item.profile.id];
-          return (
+        {results.length === 0 ? <div className="card metric"><span>No app profiles yet.</span><strong>0</strong></div> : results.map((item) => (
           <article className="card app-card" key={item.profile.id}>
             <div>
               <h3>{item.profile.repo}</h3>
@@ -153,16 +146,17 @@ export function AppProfilesClient() {
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Build:</strong><span>{item.profile.build_command || 'Not detected'}</span></div>
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Dev:</strong><span>{item.profile.dev_command || 'Not detected'}</span></div>
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Verify:</strong><span>{item.profile.verify_command || 'Not detected'}</span></div>
+                {item.workload.workspace_path && <div className="row-card" style={{ gap: '.75rem' }}><strong>Workspace:</strong><span>{item.workload.workspace_path}</span></div>}
               </div>
               <div className="toolbar" style={{ marginTop: '1rem' }}>
-                <button className="btn" type="button" disabled={running} onClick={() => assignLaunchLink(item.profile)}>Assign launch link</button>
-                {href && <a className="btn secondary" href={href}>Open launch link</a>}
+                <button className="btn" type="button" disabled={running} onClick={() => prepareWorkspace(item.profile)}>Prepare workspace</button>
+                {item.workload.log_path && <a className="btn secondary" href="/logs">View logs</a>}
               </div>
-              {href && <p className="muted">Assigned URL: {href}</p>}
+              <p className="muted">Launch URL stays locked until real install, build, and runtime steps succeed.</p>
             </div>
             <span className={`status ${item.profile.profile_ready ? 'successful' : 'pending'}`}>{item.profile.profile_ready ? 'Ready' : 'Review'}</span>
           </article>
-        );})}
+        ))}
       </div>
     </section>
   );
