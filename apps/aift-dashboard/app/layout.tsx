@@ -3,14 +3,27 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'AI Freedom Trust VPS',
-  description: 'Mobile-first app foundry dashboard for AI Freedom Trust VPS.'
+  title: 'AIFT Cloud App Foundry',
+  description: 'Mobile-first decentralized cloud app foundry dashboard.'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <header className="topbar">
+          <a className="brand" href="/">AIFT Cloud</a>
+          <nav className="nav-scroll">
+            <a href="/apps">Apps</a>
+            <a href="/templates">Templates</a>
+            <a href="/builds">Builds</a>
+            <a href="/deployments">Deployments</a>
+            <a href="/nodes">Nodes</a>
+            <a href="/settings">Settings</a>
+          </nav>
+        </header>
+        {children}
+      </body>
     </html>
   );
 }
