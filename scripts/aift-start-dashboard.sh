@@ -51,6 +51,9 @@ if [ ! -d node_modules ]; then
   npm install
 fi
 
+READY_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '{"state":"ready","message":"Dashboard is ready. Return to AIFT Cloud.","updated_at":"%s","commit":"%s","port":"%s"}\n' "$READY_AT" "$RUNNING_COMMIT" "$ASSIGNED_PORT" > "$RUNTIME_DIR/dashboard-ready.json"
+
 printf '\n[AIFT VPS] Dashboard assigned port: %s\n' "$ASSIGNED_PORT"
 printf '[AIFT VPS] Local URL: http://%s:%s\n' "$HOST" "$ASSIGNED_PORT"
 printf '[AIFT VPS] Running commit: %s\n\n' "$RUNNING_COMMIT"
