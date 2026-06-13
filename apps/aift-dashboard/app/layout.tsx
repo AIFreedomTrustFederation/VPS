@@ -17,6 +17,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <nav className="nav-scroll">
             <a href="/domains">Domains</a>
             <a href="/sites">Sites</a>
+            <a href="/dns">DNS</a>
+            <a href="/deployments">Deployments</a>
+            <a href="/nodes">Nodes</a>
+            <a href="/registry">Registry</a>
             <a href="/sync">Sync</a>
             <a href="/controls">Controls</a>
             <a href="/webai">WebAI</a>
@@ -27,8 +31,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <a href="/apps">Apps</a>
             <a href="/templates">Templates</a>
             <a href="/builds">Builds</a>
-            <a href="/deployments">Deployments</a>
-            <a href="/nodes">Nodes</a>
             <a href="/discovered-nodes">Discovery</a>
             <a href="/shell">Shell</a>
             <a href="/health">Health</a>
