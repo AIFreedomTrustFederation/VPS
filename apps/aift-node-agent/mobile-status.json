@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "node": "sacramento-node-001",
+  "status_items": [
+    "dashboard",
+    "health",
+    "node-page",
+    "registry"
+  ]
+}
