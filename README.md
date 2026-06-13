@@ -1,272 +1,337 @@
-# AI Freedom Trust VPS
+# AI Freedom Trust Cloud App Foundry
 
-**Repository description:** Open-source, phone-controlled Vercel-style VPS platform for building, rebuilding, deploying, previewing, monitoring, and rolling back AI Freedom Trust web apps from GitHub.
+**Repository description:** Mobile-first, fully disclosed decentralized cloud app foundry for creating, building, rebuilding, deploying, monitoring, and hosting web applications across AIFT compute nodes from GitHub.
 
-AI Freedom Trust VPS is the foundation for a sovereign, open-source, mobile-first app foundry. It is designed to work like a self-hosted Vercel/Codespaces-style system where a mobile device acts as the command center, GitHub acts as the source of truth, and a VPS performs the heavy build, deploy, rebuild, rollback, and hosting work.
+AI Freedom Trust Cloud App Foundry is a sovereign, open-source, phone-controlled cloud platform. It begins as one VPS, then grows into a decentralized compute network where approved node operators can contribute servers, VPS instances, and infrastructure to build and host applications under clear disclosure, security standards, and trust levels.
 
-The goal is simple:
-
-> Create an app with AI, store every file in GitHub, build it on our VPS, deploy it to a domain, and manage everything from a phone.
+> Create apps from a phone. Store every file in GitHub. Build with AIFT Cloud. Deploy across disclosed compute nodes. Rebuild like Vercel. Stay transparent about where each app runs.
 
 ---
 
 ## Mission
 
-AI Freedom Trust VPS must become a private open-source development and deployment platform that can launch any web application created by AI Freedom Trust.
+AI Freedom Trust Cloud exists to make app creation and deployment accessible from a mobile device while preserving transparency, portability, and infrastructure sovereignty.
 
-It should allow us to:
+The platform must allow users to:
 
-- Build from GitHub like Vercel.
-- Rebuild after every code change.
-- Deploy apps to custom domains and subdomains.
-- Run preview deployments for branches and pull requests.
-- Manage apps from a mobile browser or phone SSH app.
-- Keep every project portable, reproducible, and open-source.
-- Avoid vendor lock-in.
-- Preserve rollback versions so broken deployments do not destroy live apps.
-
----
-
-## Final Requirement Statement
-
-**AI Freedom Trust VPS is a self-hosted, open-source, phone-controlled Vercel-style deployment platform that uses GitHub-hosted repositories, Docker-based builds, automated HTTPS, app previews, logs, health checks, backups, and rollback to launch any AI Freedom Trust web application from a mobile device.**
+- Create apps from templates.
+- Generate and edit app files with AI-assisted workflows.
+- Store source code in GitHub.
+- Build and rebuild apps like Vercel.
+- Deploy to custom domains or AIFT subdomains.
+- Run apps on managed, verified, or self-hosted AIFT compute nodes.
+- View logs, status, builds, deployments, and node disclosures from a phone.
+- Avoid hidden infrastructure and vendor lock-in.
+- Understand exactly what kind of node is hosting each workload.
 
 ---
 
-## System Philosophy
+## Product Definition
 
-This platform should not be treated as a normal VPS.
+**AI Freedom Trust Cloud App Foundry is a mobile-first decentralized cloud compute platform where applications are created from templates or AI-assisted workflows, stored in GitHub, built with Docker-compatible infrastructure, deployed across disclosed AIFT compute nodes, and managed from a browser-based dashboard.**
 
-It is the **AI Freedom Trust App Foundry**.
+This is not only a VPS dashboard. The VPS is node one. The product is the cloud foundry.
 
-The system pattern is:
+---
+
+## Full Disclosure Principle
+
+AIFT Cloud must be transparent about where applications run.
+
+Every deployment should disclose:
+
+- App name
+- Deployment ID
+- Node name
+- Node operator class
+- Node trust level
+- Region
+- Runtime type
+- Backup status
+- Monitoring status
+- Whether the node is AIFT-managed, verified community-operated, or self-hosted
+
+Example:
 
 ```text
-Mobile Phone
-   ↓
-ChatGPT / AI-assisted app creation
-   ↓
-GitHub repository
-   ↓
-AI Freedom Trust VPS builder
-   ↓
-Docker container
-   ↓
-Reverse proxy + HTTPS
-   ↓
-Live web app
+App: capital-city-provisions
+Node: sacramento-node-001
+Operator class: AIFT managed
+Region: US West
+Trust level: verified
+Runtime: Docker container
+Backups: enabled
+Monitoring: enabled
 ```
 
-The mobile device does not need to compile the application. The phone gives the command. GitHub stores the code. The VPS performs the build.
+For community nodes, the disclosure must clearly say that the node is independently operated and should only receive workloads that match its trust level.
 
 ---
 
-## Best Available System Design
-
-The recommended architecture is a layered self-hosted PaaS model.
-
-### Layer 1: VPS Operating System
-
-Recommended:
-
-- Ubuntu 24.04 LTS
-- Public IPv4 address
-- SSH access
-- Root or sudo user
-- Automated provider snapshots
-- At least 4 GB RAM for small apps
-- 8 GB RAM or more for reliable builds
-- 100 GB SSD or more for multiple apps and build cache
-
-### Layer 2: Container Runtime
-
-Required:
-
-- Docker Engine
-- Docker Compose
-- BuildKit enabled
-- Per-app containers
-- Isolated networks
-- Persistent volumes for databases and uploads
-
-Docker is the standard runtime because every app can be packaged, rebuilt, moved, and restored consistently.
-
-### Layer 3: Open-Source PaaS Controller
-
-Recommended production base:
-
-- **Coolify** as the primary self-hosted PaaS controller.
-- **Dokploy** as a strong alternative or future supported adapter.
-- **CapRover** as a simpler fallback option.
-
-Why Coolify-first:
-
-- Open-source PaaS model.
-- Supports apps, databases, services, and Docker-compatible deployments.
-- Supports Git-based push-to-deploy workflows.
-- Supports GitHub, GitLab, Bitbucket, Gitea, and other Git providers.
-- Supports custom domains and automatic SSL certificates.
-- Supports pull request deployments.
-- Supports backups, monitoring, webhooks, API automation, and browser terminal access.
-
-Why Dokploy is also important:
-
-- Open-source alternative to Heroku, Vercel, and Netlify.
-- Built around Docker and Traefik.
-- Supports applications, databases, Docker Compose, domains, backups, Git sources, environment variables, remote servers, build servers, and auto deploy.
-
-The AI Freedom Trust platform should start by integrating with one strong controller and later wrap it with our own `aift` command and dashboard.
-
-### Layer 4: Reverse Proxy and HTTPS
-
-Recommended:
-
-- Caddy for simple automatic HTTPS, or
-- Traefik if using Dokploy as the base controller.
-
-Every public app must receive HTTPS automatically.
-
-Required routing pattern:
+## Platform Model
 
 ```text
-app-name.aifreedomtrust.com       → deployed application
-api.app-name.aifreedomtrust.com   → backend API
-preview-id.preview.aifreedomtrust.com → branch or pull request preview
-code.aifreedomtrust.com           → mobile code editor
-vps.aifreedomtrust.com            → private control dashboard
-status.aifreedomtrust.com         → uptime dashboard
-```
-
-### Layer 5: AI Freedom Trust Wrapper
-
-The long-term unique value is the AIFT wrapper layer:
-
-```text
-aift deploy
-aift rebuild
-aift rollback
-aift logs
-aift apps
-aift status
-aift domains
-aift env
-aift backup
-```
-
-This wrapper should call the underlying PaaS, Docker, GitHub, and reverse proxy systems while giving AI Freedom Trust one simple command language.
-
----
-
-## Required Capabilities
-
-The finished platform must be able to:
-
-- Connect to GitHub repositories.
-- Clone AI Freedom Trust apps.
-- Detect app frameworks automatically.
-- Install dependencies.
-- Build production artifacts.
-- Build Docker images.
-- Run Docker Compose apps.
-- Deploy static sites.
-- Deploy frontend apps.
-- Deploy backend APIs.
-- Deploy full-stack apps.
-- Deploy databases and services.
-- Assign domains and subdomains.
-- Enable HTTPS automatically.
-- Trigger rebuilds after GitHub updates.
-- Run preview deployments for branches or pull requests.
-- Store build logs.
-- Store runtime logs.
-- Run health checks.
-- Preserve last known good deployments.
-- Roll back failed deployments.
-- Manage environment variables securely.
-- Back up databases and volumes.
-- Monitor uptime.
-- Expose mobile-friendly dashboards.
-
----
-
-## Supported App Types
-
-Phase 1 support:
-
-- Static HTML/CSS/JS
-- Vite
-- React
-- Next.js
-- Node.js
-- Express
-- Astro
-- SvelteKit
-- Vue
-- Nuxt
-- FastAPI
-- Dockerfile-based apps
-- Docker Compose apps
-
-Phase 2 support:
-
-- WordPress
-- Laravel
-- Django
-- Rails
-- Go
-- Rust
-- Bun
-- Deno
-- Supabase-style service stacks
-- AI chatbot apps
-- Customer portals
-- Internal admin dashboards
-
----
-
-## Framework Detection Standard
-
-The builder should detect app type by checking for common files.
-
-```text
-package.json              → Node-based app
-vite.config.*             → Vite app
-next.config.*             → Next.js app
-astro.config.*            → Astro app
-svelte.config.*           → SvelteKit app
-nuxt.config.*             → Nuxt app
-requirements.txt          → Python app
-pyproject.toml            → Python app
-main.py + FastAPI import   → FastAPI app
-Dockerfile                → Custom Docker app
-docker-compose.yml        → Compose app
-index.html                → Static app
-```
-
-Priority order:
-
-```text
-1. Use docker-compose.yml if present.
-2. Use Dockerfile if present.
-3. Use aift.app.yml if present.
-4. Auto-detect framework.
-5. Fall back to static hosting.
+Phone Browser
+   ↓
+AIFT Dashboard
+   ↓
+AIFT Control Plane
+   ↓
+GitHub Source Repositories
+   ↓
+Build Queue
+   ↓
+AIFT Compute Nodes
+   ↓
+Docker Runtime / Reverse Proxy / HTTPS
+   ↓
+Live Applications
 ```
 
 ---
 
-## Standard App Configuration
+## Core Components
 
-Every AI Freedom Trust app should include an `aift.app.yml` file.
+### AIFT Dashboard
 
-Example Vite app:
+Location:
+
+```text
+apps/aift-dashboard
+```
+
+The mobile-first web control panel for apps, templates, builds, deployments, logs, domains, nodes, and disclosures.
+
+### AIFT Control Plane
+
+Coordinates app records, node records, templates, build jobs, deployment jobs, domains, logs, and disclosure records. The first version may use YAML registries. Later versions should move to a database.
+
+### AIFT Node Agent
+
+Planned location:
+
+```text
+apps/aift-node-agent
+```
+
+The software each compute node runs to register, report health, report resources, accept approved jobs, build containers, run apps, and report logs.
+
+### GitHub Source Layer
+
+GitHub is the source of truth for app files. Every app should be reproducible from a GitHub repo, `aift.app.yml`, build settings, and deployment record.
+
+### Runtime Layer
+
+The runtime should be Docker-first with isolated containers, HTTPS, health checks, logs, rollback, resource limits, and deployment disclosure.
+
+---
+
+## Node Types
+
+### Managed AIFT Node
+
+Owned or directly controlled by AI Freedom Trust Federation. Use for client apps, business apps, sensitive dashboards, databases, and paid production workloads.
+
+### Verified Community Node
+
+Operated by an approved third party under AIFT standards. Use for public websites, demo apps, low-risk workloads, distributed capacity, and future revenue-share compute.
+
+### Self-Hosted Node
+
+Operated by the app owner or builder. Use for sovereign deployments, private builders, personal apps, development environments, and customers who want control of their own server.
+
+---
+
+## Workload Trust Classes
+
+### Class 1: Public Static
+
+Landing pages, brochures, public docs, marketing pages. Can run on managed, verified community, or self-hosted nodes.
+
+### Class 2: Public Dynamic
+
+React apps, Next.js apps, public dashboards, and basic APIs. Can run on managed nodes, self-hosted nodes, or verified community nodes if no sensitive data is involved.
+
+### Class 3: Business App
+
+Client portals, booking apps, CRM-like tools, and admin dashboards. Should run on managed nodes or explicitly trusted self-hosted nodes.
+
+### Class 4: Sensitive App
+
+Apps with private customer data, payments, identity, or internal administration. Managed nodes only at first.
+
+### Class 5: Database Workload
+
+Postgres, MySQL, Redis, uploads, and storage services. Managed nodes only at first, unless the customer explicitly self-hosts.
+
+---
+
+## Current Repository Structure
+
+```text
+.
+├── apps/
+│   └── aift-dashboard/
+├── bin/
+│   └── aift
+├── docs/
+├── scripts/
+├── templates/
+│   ├── static-site/
+│   └── vite-react/
+├── aift.schema.yml
+└── README.md
+```
+
+Current coded product:
+
+```text
+apps/aift-dashboard
+```
+
+Current templates:
+
+```text
+templates/static-site
+templates/vite-react
+```
+
+Current setup scripts:
+
+```text
+scripts/setup-vps.sh
+scripts/create-aift-folders.sh
+scripts/mobile-realworld-setup.sh
+```
+
+---
+
+## Planned Repository Structure
+
+```text
+.
+├── apps/
+│   ├── aift-dashboard/
+│   ├── aift-node-agent/
+│   ├── aift-control-api/
+│   └── aift-builder-worker/
+├── registry-examples/
+│   ├── apps.yml
+│   ├── nodes.yml
+│   ├── templates.yml
+│   ├── builds.yml
+│   └── deployments.yml
+├── scripts/
+│   ├── install-node-agent.sh
+│   ├── register-node.sh
+│   ├── create-app-from-template.sh
+│   └── deploy-app.sh
+├── templates/
+│   ├── static-site/
+│   ├── vite-react/
+│   ├── nextjs/
+│   ├── node-api/
+│   └── fastapi/
+├── aift.schema.yml
+├── aift.node.schema.yml
+└── README.md
+```
+
+---
+
+## Node Directory Standard
+
+Each AIFT node should use this structure:
+
+```text
+/opt/aift/
+├── apps/
+├── builds/
+├── deployments/
+├── registry/
+│   ├── apps.yml
+│   ├── nodes.yml
+│   ├── templates.yml
+│   ├── builds.yml
+│   └── deployments.yml
+├── builder/
+├── proxy/
+├── logs/
+├── backups/
+├── secrets/
+├── node-agent/
+└── scripts/
+```
+
+---
+
+## Registry Standards
+
+### Apps Registry
 
 ```yaml
-name: handyman-site
-repo: https://github.com/AIFreedomTrustFederation/handyman-site
-domain: handyman.aifreedomtrust.com
+apps:
+  aift-launch-test:
+    repo: https://github.com/AIFreedomTrustFederation/aift-launch-test
+    branch: main
+    domain: test.aifreedomtrust.com
+    framework: vite
+    status: running
+    node: sacramento-node-001
+    trust_class: public-static
+    last_successful_release: 2026-06-12-1435
+```
+
+### Nodes Registry
+
+```yaml
+nodes:
+  sacramento-node-001:
+    operator: AI Freedom Trust Federation
+    operator_class: managed
+    region: us-west
+    status: online
+    trust_level: verified
+    cpu_cores: 4
+    memory_gb: 8
+    storage_gb: 100
+    supports:
+      - static
+      - vite
+      - nextjs
+      - docker
+```
+
+### Templates Registry
+
+```yaml
+templates:
+  static-site:
+    name: Static Website
+    framework: static
+    path: templates/static-site
+  vite-react:
+    name: React App
+    framework: vite
+    path: templates/vite-react
+```
+
+---
+
+## App Configuration Standard
+
+Every app should include `aift.app.yml`.
+
+```yaml
+name: aift-launch-test
+repo: https://github.com/AIFreedomTrustFederation/aift-launch-test
+domain: test.aifreedomtrust.com
 branch: main
 framework: vite
+trust_class: public-static
+node_selector:
+  operator_class: managed
+  region: us-west
 build:
   install: npm ci
   command: npm run build
@@ -275,617 +340,312 @@ runtime:
   type: static
   port: 3000
   healthcheck: /
-env:
-  NODE_ENV: production
+preview:
+  enabled: true
+  domain_pattern: "{branch}.preview.aifreedomtrust.com"
 ```
 
-Example Next.js app:
+---
+
+## Node Configuration Standard
+
+Every node should include `aift.node.yml`.
 
 ```yaml
-name: trust-dashboard
-repo: https://github.com/AIFreedomTrustFederation/trust-dashboard
-domain: dashboard.aifreedomtrust.com
-branch: main
-framework: nextjs
-build:
-  install: npm ci
-  command: npm run build
-  start: npm start
-runtime:
-  type: node
-  port: 3000
-  healthcheck: /
-env:
-  NODE_ENV: production
-```
-
-Example Docker Compose app:
-
-```yaml
-name: capital-city-provisions
-repo: https://github.com/AIFreedomTrustFederation/capital-city-provisions
-domain: capitalcityprovisions.com
-branch: main
-framework: docker-compose
-compose:
-  file: docker-compose.yml
-runtime:
-  healthcheck: /
+node:
+  name: sacramento-node-001
+  operator: AI Freedom Trust Federation
+  operator_class: managed
+  region: us-west
+  trust_level: verified
+  public_hostname: node-001.aiftcloud.com
+  supports:
+    - static
+    - vite
+    - nextjs
+    - node
+    - docker
+  resources:
+    cpu_cores: 4
+    memory_gb: 8
+    storage_gb: 100
+  disclosure:
+    public_node_identity: true
+    public_operator_class: true
+    public_region: true
 ```
 
 ---
 
-## App Repository Standard
-
-Every deployable app should follow this structure:
+## Mobile-First Cloud Workflow
 
 ```text
-app-name/
-├── README.md
-├── aift.app.yml
-├── .env.example
-├── Dockerfile              # optional but preferred for custom apps
-├── docker-compose.yml      # optional for multi-service apps
-├── package.json            # for Node-based apps
-├── public/
-├── src/
-└── docs/
-```
-
-Required rules:
-
-- Never commit real secrets.
-- Always include `.env.example`.
-- Always document build and start commands.
-- Always expose a health check route when possible.
-- Always define the production domain.
-- Prefer deterministic install commands such as `npm ci`.
-- Prefer Docker for production parity.
-
----
-
-## VPS Directory Standard
-
-The production VPS should use this structure:
-
-```text
-/opt/aift/
-├── apps/
-│   ├── app-name/
-│   │   ├── repo/
-│   │   ├── releases/
-│   │   ├── current/
-│   │   ├── shared/
-│   │   └── .env
-├── builder/
-│   ├── templates/
-│   ├── detect-framework.sh
-│   ├── build-app.sh
-│   ├── deploy-app.sh
-│   ├── rebuild-app.sh
-│   └── rollback-app.sh
-├── registry/
-│   └── apps.yml
-├── proxy/
-│   └── Caddyfile
-├── logs/
-├── backups/
-├── secrets/
-└── scripts/
+1. Open AIFT Cloud from phone browser.
+2. Login.
+3. Tap Create New App.
+4. Choose template.
+5. Describe the app.
+6. Generate or edit files.
+7. Push source to GitHub.
+8. Select workload trust class.
+9. Select eligible node type.
+10. Build the app.
+11. Deploy to a domain.
+12. View deployment disclosure.
+13. Rebuild after changes.
+14. Roll back if needed.
 ```
 
 ---
 
-## App Registry Standard
+## Dashboard Pages to Build
 
-The VPS should maintain an app registry.
-
-Example:
-
-```yaml
-apps:
-  handyman-site:
-    repo: https://github.com/AIFreedomTrustFederation/handyman-site
-    branch: main
-    domain: handyman.aifreedomtrust.com
-    framework: vite
-    status: running
-    port: 3101
-    last_successful_release: 2026-06-12-1435
-
-  capital-city-provisions:
-    repo: https://github.com/AIFreedomTrustFederation/capital-city-provisions
-    branch: main
-    domain: capitalcityprovisions.com
-    framework: nextjs
-    status: running
-    port: 3102
-    last_successful_release: 2026-06-12-1510
+```text
+/
+/apps
+/new
+/templates
+/builds
+/deployments
+/nodes
+/domains
+/logs
+/settings
+/disclosures/[app]
 ```
 
-The dashboard should read from this registry and display:
+Minimum v0.1:
 
-- App name
-- Domain
-- GitHub repo
-- Branch
-- Framework
-- Status
-- Last build
-- Last commit
-- Runtime logs
-- Build logs
-- Restart button
-- Rebuild button
-- Rollback button
-- Open live app button
+- `/` dashboard overview
+- `/new` new app page
+- `/apps` app registry
+- `/nodes` node registry
+- `/templates` template registry
+- `/api/status`
+- `/api/apps`
+- `/api/nodes`
+- `/api/templates`
 
 ---
 
-## Build and Rebuild Flow
-
-The Vercel-style build process must work like this:
+## API Routes to Build
 
 ```text
-1. Receive deploy request.
-2. Clone or pull GitHub repo.
-3. Read aift.app.yml if present.
-4. Detect framework if config is missing.
-5. Install dependencies.
-6. Run build command.
-7. Create production artifact or Docker image.
-8. Start new container.
-9. Run health check.
-10. Route domain to new container.
-11. Mark release successful.
-12. Preserve previous release for rollback.
-```
-
-If the build fails:
-
-```text
-- Keep the existing live app running.
-- Store the failed build logs.
-- Mark deployment failed.
-- Do not replace the current release.
-```
-
-If deployment starts but health check fails:
-
-```text
-- Stop the broken container.
-- Restore the previous container.
-- Mark the release unhealthy.
-- Keep the last known good version live.
+GET  /api/status
+GET  /api/apps
+GET  /api/nodes
+GET  /api/templates
+GET  /api/builds
+GET  /api/deployments
+POST /api/apps/create
+POST /api/builds/start
+POST /api/deployments/start
+POST /api/deployments/rebuild
+POST /api/deployments/rollback
+POST /api/nodes/register
+POST /api/nodes/heartbeat
+GET  /api/disclosures/[app]
 ```
 
 ---
 
-## Preview Deployment Standard
-
-Production:
-
-```text
-main branch → app-domain.com
-```
-
-Development:
-
-```text
-dev branch → dev.app-domain.com
-```
-
-Pull request or feature branch:
-
-```text
-feature-name.preview.app-domain.com
-```
-
-Example:
-
-```text
-main                    → capitalcityprovisions.com
-dev                     → dev.capitalcityprovisions.com
-mobile-menu-fix          → mobile-menu-fix.preview.capitalcityprovisions.com
-luxury-mobile-redesign   → luxury-mobile-redesign.preview.capitalcityprovisions.com
-```
-
-Preview deployments allow testing from a phone before production changes go live.
-
----
-
-## Mobile-First Workflow
-
-The system must require no desktop computer.
-
-Required mobile tools:
-
-- GitHub mobile app
-- Mobile browser
-- ChatGPT
-- Termius, JuiceSSH, or another SSH client
-- Browser-based code editor such as code-server or OpenVSCode Server
-- Optional mobile editor such as Acode, Spck Editor, or Working Copy
-
-Ideal workflow:
-
-```text
-1. Describe app or change in ChatGPT.
-2. Generate or update files.
-3. Commit files to GitHub.
-4. Open VPS dashboard from phone.
-5. Select repo or app.
-6. Tap Deploy or Rebuild.
-7. Watch build logs.
-8. Open live app.
-9. Roll back if needed.
-```
-
-Phone command example:
+## CLI Commands to Build
 
 ```bash
-aift deploy handyman-site
-```
-
-Rebuild example:
-
-```bash
-aift rebuild capital-city-provisions
-```
-
-Logs example:
-
-```bash
-aift logs handyman-site
-```
-
-Rollback example:
-
-```bash
-aift rollback handyman-site
-```
-
----
-
-## Dashboard Requirement
-
-The AI Freedom Trust VPS dashboard should eventually run at:
-
-```text
-https://vps.aifreedomtrust.com
-```
-
-Dashboard features:
-
-- Deploy new app
-- Import GitHub repo
-- Rebuild app
-- Restart app
-- Stop app
-- Rollback app
-- Open live app
-- Open GitHub repo
-- View build logs
-- View runtime logs
-- Manage environment variables
-- Manage domains
-- View server resources
-- View uptime status
-- Run backups
-- View release history
-- Manage preview deployments
-
-The dashboard should be designed for mobile first.
-
----
-
-## Recommended Domain Layout
-
-Private platform domains:
-
-```text
-vps.aifreedomtrust.com        → AIFT dashboard
-code.aifreedomtrust.com       → browser code editor
-status.aifreedomtrust.com     → uptime monitoring
-logs.aifreedomtrust.com       → optional log viewer
-preview.aifreedomtrust.com    → preview deployment root
-```
-
-Public app domains:
-
-```text
-handyman.aifreedomtrust.com
-capitalcityprovisions.com
-trust.aifreedomtrust.com
-api.aifreedomtrust.com
-```
-
-DNS should support wildcard routing where possible:
-
-```text
-*.apps.aifreedomtrust.com      → VPS IP
-*.preview.aifreedomtrust.com   → VPS IP
-```
-
----
-
-## Security Requirements
-
-Minimum security standard:
-
-- SSH key login only.
-- Disable password SSH login.
-- Disable direct root login when deploy user is ready.
-- Use a non-root deploy user.
-- Enable UFW firewall.
-- Allow only SSH, HTTP, and HTTPS unless another port is required.
-- Install Fail2ban.
-- Use HTTPS for every dashboard and app.
-- Protect dashboards with authentication.
-- Store secrets outside GitHub.
-- Use GitHub Secrets where needed.
-- Use per-app `.env` files on the VPS.
-- Never expose database ports publicly.
-- Use automated backups.
-- Rotate credentials after compromise.
-- Keep OS and containers updated.
-
-Suggested firewall baseline:
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-```
-
----
-
-## Secrets Standard
-
-Secrets must not be committed to GitHub.
-
-Each app may include:
-
-```text
-.env.example
-```
-
-But production secrets must live in:
-
-```text
-/opt/aift/apps/app-name/.env
-```
-
-or in the chosen PaaS environment variable manager.
-
-Common secrets:
-
-```text
-DATABASE_URL
-OPENAI_API_KEY
-JWT_SECRET
-SESSION_SECRET
-SMTP_HOST
-SMTP_USER
-SMTP_PASS
-STRIPE_SECRET_KEY
-WEBHOOK_SECRET
-```
-
----
-
-## Logs Standard
-
-Every app should have build and runtime logs.
-
-```text
-/opt/aift/logs/app-name/build.log
-/opt/aift/logs/app-name/deploy.log
-/opt/aift/logs/app-name/runtime.log
-/opt/aift/logs/app-name/error.log
-```
-
-Commands:
-
-```bash
+aift status
+aift apps
+aift nodes
+aift templates
+aift create app-name --template vite-react
+aift deploy app-name
+aift rebuild app-name
+aift rollback app-name
 aift logs app-name
-aift logs app-name --build
-aift logs app-name --runtime
-aift logs app-name --tail
-```
-
----
-
-## Backup Standard
-
-Required backup targets:
-
-- App registry
-- App environment files
-- Docker Compose files
-- Databases
-- Upload volumes
-- Reverse proxy configuration
-- PaaS controller data
-
-Recommended backup stack:
-
-- Restic
-- S3-compatible object storage
-- Daily automated backups
-- Weekly restore test
-
-Backup command:
-
-```bash
+aift register-node
+aift node-status
 aift backup
+aift disclosure app-name
 ```
 
-Restore command:
+---
+
+## Build and Deployment Flow
+
+```text
+1. User creates app from dashboard.
+2. Dashboard writes app registry record.
+3. Source files are committed to GitHub.
+4. Build job is created.
+5. Control plane selects eligible node.
+6. Node pulls source.
+7. Node builds app.
+8. Node runs health check.
+9. Domain is routed.
+10. Deployment record is written.
+11. Disclosure record is published.
+12. Dashboard shows app as running.
+```
+
+Failure rules:
+
+- Failed build must not replace the live app.
+- Failed health check must not become production.
+- Last known good deployment must remain available.
+- Logs must be preserved.
+- Deployment status must be visible from phone.
+
+---
+
+## Security Principles
+
+- Never expose raw shell execution in the browser UI.
+- Never commit production secrets.
+- Use `.env.example` only for examples.
+- Store production secrets outside source control.
+- Use HTTPS for every app and dashboard.
+- Use SSH keys instead of passwords.
+- Use firewall rules.
+- Use Fail2ban.
+- Isolate apps in containers.
+- Do not run sensitive workloads on low-trust community nodes.
+- Every node must declare operator class and trust level.
+- Every deployment must disclose node class.
+
+---
+
+## Bootstrap From Phone
+
+The intended first-server setup is from a mobile SSH app such as Termius.
 
 ```bash
-aift restore app-name --release latest-good
+apt update && apt install -y git curl
+git clone https://github.com/AIFreedomTrustFederation/VPS.git /root/VPS
+cd /root/VPS
+chmod +x scripts/*.sh bin/aift
+sudo bash scripts/mobile-realworld-setup.sh
 ```
 
----
-
-## Monitoring Standard
-
-The platform should monitor:
-
-- VPS CPU
-- RAM
-- Disk usage
-- Docker container health
-- App HTTP response
-- SSL certificate status
-- Database availability
-- Backup success
-- Failed deploys
-
-Recommended tool:
-
-- Uptime Kuma for external-style uptime checks
-- Built-in PaaS monitoring for deploy and container status
+For private repos, authenticate with a GitHub token or configure deploy keys.
 
 ---
 
-## Implementation Roadmap
+## First Milestone
 
-### Phase 0: Repository Foundation
-
-- [x] Define project mission.
-- [x] Define Vercel-style requirements.
-- [x] Define mobile-first workflow.
-- [x] Define app standards.
-- [ ] Add setup scripts.
-- [ ] Add docs folder.
-- [ ] Add starter templates.
-
-### Phase 1: VPS Bootstrap
-
-- [ ] Provision Ubuntu 24.04 VPS.
-- [ ] Point domain DNS to VPS.
-- [ ] Install Docker Engine.
-- [ ] Install Docker Compose.
-- [ ] Enable firewall.
-- [ ] Enable Fail2ban.
-- [ ] Create deploy user.
-- [ ] Configure SSH key-only login.
-- [ ] Install Coolify or chosen PaaS controller.
-- [ ] Configure HTTPS.
-
-### Phase 2: GitHub Deployment
-
-- [ ] Connect GitHub account or deploy keys.
-- [ ] Import this VPS repo.
-- [ ] Import first test app.
-- [ ] Configure production domain.
-- [ ] Configure build command.
-- [ ] Configure environment variables.
-- [ ] Deploy first app.
-- [ ] Confirm HTTPS.
-- [ ] Confirm rebuild from GitHub push.
-
-### Phase 3: App Standardization
-
-- [ ] Create `aift.app.yml` schema.
-- [ ] Create app templates.
-- [ ] Create static site template.
-- [ ] Create Vite template.
-- [ ] Create Next.js template.
-- [ ] Create Node API template.
-- [ ] Create FastAPI template.
-- [ ] Create Docker Compose template.
-
-### Phase 4: AIFT CLI Wrapper
-
-- [ ] Create `aift` CLI.
-- [ ] Add `aift deploy`.
-- [ ] Add `aift rebuild`.
-- [ ] Add `aift rollback`.
-- [ ] Add `aift logs`.
-- [ ] Add `aift apps`.
-- [ ] Add `aift status`.
-- [ ] Add `aift domains`.
-- [ ] Add `aift backup`.
-
-### Phase 5: Mobile Dashboard
-
-- [ ] Build dashboard UI.
-- [ ] List deployed apps.
-- [ ] Add deploy button.
-- [ ] Add rebuild button.
-- [ ] Add rollback button.
-- [ ] Add log viewer.
-- [ ] Add environment manager.
-- [ ] Add domain manager.
-- [ ] Add uptime panel.
-- [ ] Add server resource panel.
-
-### Phase 6: Preview Deployments
-
-- [ ] Add branch deployment support.
-- [ ] Add pull request preview support.
-- [ ] Add wildcard preview DNS.
-- [ ] Add preview cleanup.
-- [ ] Add preview approval flow.
-
-### Phase 7: Production Hardening
-
-- [ ] Automated backups.
-- [ ] Restore testing.
-- [ ] Resource limits per app.
-- [ ] Deployment audit logs.
-- [ ] Secret rotation process.
-- [ ] Dashboard 2FA.
-- [ ] Disaster recovery guide.
-
----
-
-## First Production Target
-
-The first real milestone is:
-
-> From a phone, deploy a GitHub-hosted AI Freedom Trust app to a live HTTPS domain, then make a change, rebuild it, and confirm the app updates without touching a laptop.
+> From a phone, deploy a GitHub-hosted AIFT app to a live HTTPS domain on the first managed AIFT node, then rebuild it after a GitHub change.
 
 Definition of done:
 
-- App source lives in GitHub.
-- VPS builds the app.
-- App runs in Docker.
-- App has HTTPS.
-- App rebuilds after a GitHub update.
-- Logs are visible from phone.
-- Rollback is available.
+- VPS baseline installed
+- Dashboard builds
+- Dashboard deploys
+- Registry is readable
+- First app template exists
+- First test app deploys
+- App has HTTPS
+- App can rebuild
+- Deployment disclosure is visible
 
 ---
 
-## Recommended Repository Description
+## Roadmap
 
-Use this for the GitHub repo description:
+### Phase 0: Foundation
+
+- [x] README product direction
+- [x] VPS bootstrap scripts
+- [x] Mobile setup script
+- [x] Static template
+- [x] Vite React template
+- [x] Initial dashboard app
+- [x] App registry reader
+- [ ] Node registry examples
+- [ ] Template registry examples
+- [ ] Build registry examples
+
+### Phase 1: First Managed Node
+
+- [ ] Provision first VPS
+- [ ] Run mobile setup script
+- [ ] Install selected deployment controller
+- [ ] Deploy dashboard
+- [ ] Deploy launch test app
+- [ ] Add app disclosure record
+- [ ] Confirm rebuild from GitHub
+
+### Phase 2: Dashboard MVP
+
+- [ ] Add `/apps`
+- [ ] Add `/nodes`
+- [ ] Add `/templates`
+- [ ] Add `/builds`
+- [ ] Add `/deployments`
+- [ ] Add disclosure page
+- [ ] Add safe rebuild adapter
+- [ ] Add logs viewer
+
+### Phase 3: Node Agent MVP
+
+- [ ] Create `apps/aift-node-agent`
+- [ ] Register node
+- [ ] Heartbeat
+- [ ] Resource report
+- [ ] Docker report
+- [ ] Job polling
+- [ ] App status report
+
+### Phase 4: Decentralized Test Network
+
+- [ ] Add second node
+- [ ] Register both nodes
+- [ ] Select node for app deployment
+- [ ] Show node disclosure in dashboard
+- [ ] Deploy public static app to second node
+- [ ] Confirm monitoring and logs
+
+### Phase 5: Cloud Builder
+
+- [ ] New app wizard
+- [ ] Template selector
+- [ ] GitHub repo creation flow
+- [ ] Build queue
+- [ ] Deployment queue
+- [ ] Rollback
+- [ ] Preview deployments
+
+### Phase 6: Commercial Readiness
+
+- [ ] User accounts
+- [ ] Team access
+- [ ] Billing
+- [ ] Node operator agreements
+- [ ] Customer terms
+- [ ] Support workflows
+- [ ] Backups
+- [ ] Restore testing
+- [ ] Security audit
+
+---
+
+## Public Positioning
 
 ```text
-Open-source, phone-controlled Vercel-style VPS platform for building, rebuilding, deploying, previewing, monitoring, and rolling back AI Freedom Trust web apps from GitHub.
+AIFT Cloud App Foundry is a mobile-first decentralized cloud platform for creating, building, deploying, and managing web applications from GitHub across fully disclosed compute nodes.
+```
+
+Short version:
+
+```text
+Build apps from your phone. Deploy across a transparent decentralized cloud.
 ```
 
 ---
 
-## Project Identity
+## What This Repo Is
 
-**AI Freedom Trust VPS** is not just infrastructure.
+This repository is the seed of the AIFT Cloud network.
 
-It is the sovereign software factory for AI Freedom Trust.
+It contains the first dashboard, the first app templates, the first setup scripts, the first app configuration schema, and the future node and deployment standards.
 
-It gives us:
+The first VPS is not the whole cloud. It is node one.
 
-- A private open-source cloud.
-- A phone-powered development workflow.
-- A self-hosted Vercel alternative.
-- A reusable deployment standard.
-- A GitHub-centered file system.
-- A Docker-powered build engine.
-- A launchpad for every AI Freedom Trust app.
-
-This is the app foundry.
+This is the beginning of the AI Freedom Trust decentralized cloud app foundry.
