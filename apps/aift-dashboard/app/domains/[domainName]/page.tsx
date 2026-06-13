@@ -23,8 +23,13 @@ async function connectSiteAction(formData: FormData) {
   redirect('/domains/' + domainName);
 }
 
-export default async function DomainDetailPage({ params }: { params: { domainName: string } }) {
-  const data = await getDomain(params.domainName);
+type DomainDetailPageProps = {
+  params: Promise<{ domainName: string }>;
+};
+
+export default async function DomainDetailPage({ params }: DomainDetailPageProps) {
+  const { domainName } = await params;
+  const data = await getDomain(domainName);
   if (!data) notFound();
 
   const sites = await listNativeSites();
