@@ -24,10 +24,6 @@ type ProfileResult = {
 
 type LinkMap = Record<string, string>;
 
-function linkFor(profile: ProfileResult['profile']) {
-  return `/app-links/app-${profile.id.replace(/^profile-/, '')}`;
-}
-
 export function AppProfilesClient() {
   const [running, setRunning] = useState(false);
   const [repoUrl, setRepoUrl] = useState('');
@@ -82,10 +78,24 @@ export function AppProfilesClient() {
     setRunning(false);
   }
 
-  function assignLaunchLink(profile: ProfileResult['profile']) {
-    const href = linkFor(profile);
+  async function assignLaunchLink(profile: ProfileResult['profile']) {
+    setRunning(true);
+    setMessage('Assigning launch link...');
+    const response = await fetch('/api/app-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profileId: profile.id }),
+    });
+    const data = await response.json();
+    if (!data.ok) {
+      setMessage(data.error || 'Could not assign launch link.');
+      setRunning(false);
+      return;
+    }
+    const href = data.link.href;
     setLinks((current) => ({ ...current, [profile.id]: href }));
     setMessage(`Launch link assigned: ${href}`);
+    setRunning(false);
   }
 
   async function loadCollections() {
@@ -94,6 +104,11 @@ export function AppProfilesClient() {
     const data = await response.json();
     const profiles = data.collections?.app_profiles ?? [];
     const workloads = data.collections?.workloads ?? [];
+    const nextLinks: LinkMap = {};
+    workloads.forEach((item: { profile_id?: string; href?: string }) => {
+      if (item.profile_id && item.href) nextLinks[item.profile_id] = item.href;
+    });
+    setLinks(nextLinks);
     setResults(profiles.map((profile: ProfileResult['profile']) => ({
       profile,
       workload: workloads.find((item: ProfileResult['workload'] & { profile_id?: string }) => item.profile_id === profile.id) || { id: '', status: 'unknown', notes: '' },
@@ -140,7 +155,7 @@ export function AppProfilesClient() {
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Verify:</strong><span>{item.profile.verify_command || 'Not detected'}</span></div>
               </div>
               <div className="toolbar" style={{ marginTop: '1rem' }}>
-                <button className="btn" type="button" onClick={() => assignLaunchLink(item.profile)}>Assign launch link</button>
+                <button className="btn" type="button" disabled={running} onClick={() => assignLaunchLink(item.profile)}>Assign launch link</button>
                 {href && <a className="btn secondary" href={href}>Open launch link</a>}
               </div>
               {href && <p className="muted">Assigned URL: {href}</p>}
