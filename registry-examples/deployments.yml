@@ -1,0 +1,18 @@
+deployments:
+  deploy_001:
+    app: aift-launch-test
+    node: sacramento-node-001
+    domain: test.aifreedomtrust.com
+    status: healthy
+    deployed_at: 2026-06-12T20:05:00Z
+    disclosure_required: true
+    disclosure_path: /disclosures/aift-launch-test
+
+  deploy_002:
+    app: aift-dashboard
+    node: sacramento-node-001
+    domain: vps.aifreedomtrust.com
+    status: pending
+    deployed_at: null
+    disclosure_required: true
+    disclosure_path: /disclosures/aift-dashboard
