@@ -6,9 +6,23 @@ on:
 jobs:
   deploy-dashboard:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/aift-dashboard
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build before deploy
+        run: npm run build
 
       - name: Configure SSH
         run: |
@@ -17,7 +31,8 @@ jobs:
           chmod 600 ~/.ssh/aift_vps_key
           ssh-keyscan -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy dashboard
+      - name: Deploy dashboard to Sacramento Node 001
+        working-directory: .
         run: |
           ssh -i ~/.ssh/aift_vps_key -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" <<'EOF'
           set -Eeuo pipefail
@@ -48,5 +63,5 @@ jobs:
           cd apps/aift-dashboard
           docker compose -f compose.yml up -d --build
           docker compose -f compose.yml ps
-          echo "AIFT Dashboard is running on port 3000. Open http://YOUR_VPS_IP:3000/health"
+          echo "AIFT Dashboard deployed to Sacramento Node 001 on port 3000."
           EOF
