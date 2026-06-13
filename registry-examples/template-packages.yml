@@ -1,0 +1,30 @@
+template_packages:
+  static-site:
+    name: Static Site
+    level: 1
+    framework: static
+    path: templates/static-site
+    output: public
+    runtime: static
+    health: /
+    trust_class: public-static
+    allowed_node_classes:
+      - verified-server
+      - plugged-in-phone
+      - experimental-phone
+
+  vite-react:
+    name: Vite React App
+    level: 2
+    framework: vite
+    path: templates/vite-react
+    install: npm install
+    build: npm run build
+    output: dist
+    runtime: static
+    health: /
+    trust_class: public-static
+    allowed_node_classes:
+      - verified-server
+      - plugged-in-phone
+      - experimental-phone
