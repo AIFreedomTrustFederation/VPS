@@ -1,3 +1,5 @@
+import { listDomains } from '@/lib/domain-registry';
+
 const controlAreas = [
   'Overview',
   'DNS Records',
@@ -11,7 +13,10 @@ const controlAreas = [
   'Analytics'
 ];
 
-export default function DomainsPage() {
+export default async function DomainsPage() {
+  const domains = await listDomains();
+  const connected = domains.filter((domain) => domain.connectedSiteId).length;
+
   return (
     <main className="page">
       <section className="hero">
@@ -21,16 +26,17 @@ export default function DomainsPage() {
       </section>
 
       <nav className="toolbar">
-        <a className="btn" href="/sites/new">Create Test Site</a>
+        <a className="btn" href="/domains/new">Reserve Domain</a>
+        <a className="btn secondary" href="/sites/new">Create Site</a>
         <a className="btn secondary" href="/sites">Sites</a>
         <a className="btn secondary" href="/dns">DNS</a>
         <a className="btn secondary" href="/registry">Registry</a>
       </nav>
 
       <section className="grid metrics">
-        <div className="card metric"><span>Domains</span><strong>0</strong></div>
-        <div className="card metric"><span>Connected Sites</span><strong>0</strong></div>
-        <div className="card metric"><span>DNS Health</span><strong>Ready</strong></div>
+        <div className="card metric"><span>Domains</span><strong>{domains.length}</strong></div>
+        <div className="card metric"><span>Connected Sites</span><strong>{connected}</strong></div>
+        <div className="card metric"><span>Locked</span><strong>{domains.filter((domain) => domain.locked).length}</strong></div>
         <div className="card metric"><span>Registry</span><strong>v0.1</strong></div>
       </section>
 
@@ -41,22 +47,29 @@ export default function DomainsPage() {
       </section>
 
       <section className="app-list" style={{ marginTop: '1rem' }}>
-        <article className="card app-card">
-          <div>
-            <span className="status pending">planned</span>
-            <h3>Reserve .aft names</h3>
-            <p className="footer-note">Search availability, reserve internal .aft names, connect them to sites, then migrate the same records toward official registry readiness.</p>
-          </div>
-          <div className="actions"><a className="btn secondary" href="/dns">DNS Plan</a></div>
-        </article>
-        <article className="card app-card">
-          <div>
-            <span className="status pending">planned</span>
-            <h3>Connect domains to sites</h3>
-            <p className="footer-note">A domain should point to a site, active deployment, fallback deployment, node assignment, and disclosure page.</p>
-          </div>
-          <div className="actions"><a className="btn secondary" href="/sites">Sites</a></div>
-        </article>
+        {domains.length ? domains.map((domain) => (
+          <article className="card app-card" key={domain.id}>
+            <div>
+              <span className={'status ' + domain.status}>{domain.status}</span>
+              <h3>{domain.domainName}</h3>
+              <div className="meta">
+                <span>{domain.locked ? 'transfer locked' : 'unlocked'}</span>
+                <span>{domain.autoRenew ? 'auto-renew on' : 'auto-renew off'}</span>
+                <span>{domain.connectedSiteId ? 'site connected' : 'no site connected'}</span>
+              </div>
+            </div>
+            <div className="actions">
+              <a className="btn" href={'/domains/' + domain.domainName}>Manage</a>
+              <a className="btn secondary" href="/dns">DNS</a>
+            </div>
+          </article>
+        )) : (
+          <article className="card metric">
+            <span>No domains reserved</span>
+            <strong>Reserve the first internal .aft name</strong>
+            <p className="footer-note">Domain records are stored in the AFT domain registry with audit events, lock status, DNS records, and optional site connection.</p>
+          </article>
+        )}
       </section>
     </main>
   );
