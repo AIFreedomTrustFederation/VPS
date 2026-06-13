@@ -2,12 +2,14 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { NextRequest, NextResponse } from 'next/server';
+import { writeLocalActionLog } from '@/lib/local-action-log';
 
 const actions = [
   { id: 'refresh-node', label: 'Refresh node from GitHub' },
   { id: 'write-heartbeat', label: 'Write heartbeat' },
   { id: 'list-services', label: 'List local services' },
   { id: 'check-engine-report', label: 'Check engine report' },
+  { id: 'preview-status', label: 'Check preview status' },
 ] as const;
 
 type ActionId = typeof actions[number]['id'];
@@ -35,6 +37,8 @@ function runAction(action: ActionId) {
         return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-service-registry.sh'), 'list'], cwd: repoRoot };
       case 'check-engine-report':
         return { cmd: 'node', args: ['-e', "fetch('http://127.0.0.1:'+(process.env.APP_PORT||'3001')+'/api/engine/report').then(r=>r.text()).then(t=>console.log(t)).catch(e=>{console.error(e.message);process.exit(1)})"], cwd: appDir };
+      case 'preview-status':
+        return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-service-registry.sh'), 'list'], cwd: repoRoot };
     }
   })();
 
@@ -45,10 +49,15 @@ function runAction(action: ActionId) {
     env: { ...process.env, AIFT_HOME: process.env.AIFT_HOME || `${process.env.HOME}/.aift-webai` },
   });
 
+  const terminal = [result.stdout || '', result.stderr || ''].filter(Boolean).join('\n') || 'No output returned.';
+  const logPath = writeLocalActionLog(action, terminal);
+
   return {
     exit_code: result.status,
     stdout: result.stdout || '',
     stderr: result.stderr || '',
+    terminal,
+    log_path: logPath,
   };
 }
 
@@ -67,7 +76,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: result.exit_code === 0,
     action,
-    terminal: [result.stdout, result.stderr].filter(Boolean).join('\n'),
+    terminal: result.terminal,
+    log_path: result.log_path,
     exit_code: result.exit_code,
   });
 }
