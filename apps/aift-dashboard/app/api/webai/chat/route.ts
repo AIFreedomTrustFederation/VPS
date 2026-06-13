@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { addAppSource } from '@/lib/app-sources';
 import { appendMessage, createConversation, readConversation } from '@/lib/webai/conversations';
 import { callLocalOpenModel } from '@/lib/webai/local-runtime';
 import { findWebAIModel } from '@/lib/webai/models';
@@ -20,6 +21,18 @@ async function loadContext(): Promise<WebAIContext | null> {
 
 async function buildReply(modelId: string, message: string, context: WebAIContext | null) {
   const selectedModel = findWebAIModel(modelId);
+  const sourceResult = addAppSource(message);
+
+  if (sourceResult.ok) {
+    return {
+      model: selectedModel,
+      reply: [
+        sourceResult.created ? 'Saved app source.' : 'App source already saved.',
+        `Source: ${sourceResult.source.repo}`,
+        `Analysis path: /api/app-sources/${sourceResult.source.id}`,
+      ].join('\n'),
+    };
+  }
 
   if (selectedModel.id === 'local-open-model') {
     const result = await callLocalOpenModel(message, context);
