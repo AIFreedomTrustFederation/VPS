@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AIFT install dashboard dependencies",
+      "type": "shell",
+      "command": "npm install",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/aift-dashboard"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "AIFT build dashboard",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/aift-dashboard"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "AIFT run dashboard dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/aift-dashboard"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}
