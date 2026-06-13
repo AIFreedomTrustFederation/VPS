@@ -46,7 +46,7 @@ jobs:
           APPREGISTRY
           fi
           cd apps/aift-dashboard
-          npm install
-          npm run build
-          echo "Dashboard built successfully. Start it with: cd $APP_DIR/apps/aift-dashboard && npm start"
+          docker compose -f compose.yml up -d --build
+          docker compose -f compose.yml ps
+          echo "AIFT Dashboard is running on port 3000. Open http://YOUR_VPS_IP:3000/health"
           EOF
