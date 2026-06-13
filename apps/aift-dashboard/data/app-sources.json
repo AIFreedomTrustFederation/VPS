@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "id": "capital-city-provisions",
+      "label": "Capital City Provisions",
+      "repo": "AIFreedomTrustFederation/capital-city-provisions",
+      "branch": "main",
+      "status": "connected"
+    }
+  ]
+}
