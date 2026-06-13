@@ -1,0 +1,57 @@
+@media (max-width: 760px) {
+  .page-shell {
+    padding: 0.85rem;
+  }
+
+  .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-card,
+  .hero-card {
+    border-radius: 1.1rem;
+    padding: 0.9rem;
+    min-width: 0;
+  }
+
+  .row-card {
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.7rem;
+  }
+
+  .row-card strong {
+    flex: 0 0 auto;
+  }
+
+  .row-card span,
+  .row-card button,
+  .row-card pre {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  form.panel-card {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  form.panel-card textarea,
+  form.panel-card button,
+  select,
+  input {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .toolbar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar .btn,
+  .toolbar button {
+    width: 100%;
+  }
+}
