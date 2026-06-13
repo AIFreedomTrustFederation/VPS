@@ -38,6 +38,10 @@ function isInstallReady(workload: ProfileResult['workload']) {
   return workload.status === 'dependencies-installed' || workload.status === 'build-complete';
 }
 
+function isBuildReady(workload: ProfileResult['workload']) {
+  return workload.status === 'build-complete';
+}
+
 export function AppProfilesClient() {
   const [running, setRunning] = useState(false);
   const [repoUrl, setRepoUrl] = useState('');
@@ -146,6 +150,30 @@ export function AppProfilesClient() {
     setRunning(false);
   }
 
+  async function runBuild(profile: ProfileResult['profile']) {
+    setRunning(true);
+    setMessage('Running build in the real workspace...');
+    setTerminal({ title: 'Run build', plain: 'The node is running the detected build command inside the prepared workspace.', output: profile.build_command || 'Starting build...' });
+    const response = await fetch('/api/workspaces/run-build', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profileId: profile.id }),
+    });
+    const data = await response.json();
+
+    if (!data.ok) {
+      setMessage(data.error || 'Build failed. Check logs.');
+      setTerminal({ title: 'Build failed', plain: 'The real build command did not finish successfully. Runtime preview stays locked.', output: data.terminal || JSON.stringify(data, null, 2) });
+      setRunning(false);
+      return;
+    }
+
+    setResults((current) => current.map((item) => item.profile.id === profile.id ? { ...item, workload: data.workload } : item));
+    setMessage(`Build complete for ${profile.repo}.`);
+    setTerminal({ title: 'Build complete', plain: 'The app built successfully. The next real step is starting a runtime process and assigning a real URL.', output: data.terminal || JSON.stringify(data.workload, null, 2) });
+    setRunning(false);
+  }
+
   async function loadCollections() {
     const response = await fetch('/api/engine/collections', { cache: 'no-store' });
     if (!response.ok) return;
@@ -184,6 +212,7 @@ export function AppProfilesClient() {
           const profileDone = item.profile.profile_ready;
           const workspaceDone = isWorkspaceReady(item.workload);
           const installDone = isInstallReady(item.workload);
+          const buildDone = isBuildReady(item.workload);
           return (
           <article className="card app-card" key={item.profile.id}>
             <div>
@@ -197,7 +226,7 @@ export function AppProfilesClient() {
                 <div className={`pipeline-step ${profileDone ? 'complete' : ''}`}><strong>1. Profile</strong><p className="muted">{profileDone ? 'Complete. Repository files were analyzed.' : 'Create the profile first.'}</p></div>
                 <div className={`pipeline-step ${workspaceDone ? 'complete' : profileDone ? '' : 'locked'}`}><strong>2. Workspace</strong><p className="muted">{workspaceDone ? 'Complete. Real repo workspace is ready.' : 'Locked until profile is ready.'}</p></div>
                 <div className={`pipeline-step ${installDone ? 'complete' : workspaceDone ? '' : 'locked'}`}><strong>3. Dependencies</strong><p className="muted">{installDone ? 'Complete. Dependencies installed.' : 'Locked until workspace is ready.'}</p></div>
-                <div className="pipeline-step locked"><strong>4. Build</strong><p className="muted">Locked until dependency install succeeds.</p></div>
+                <div className={`pipeline-step ${buildDone ? 'complete' : installDone ? '' : 'locked'}`}><strong>4. Build</strong><p className="muted">{buildDone ? 'Complete. Real build succeeded.' : 'Locked until dependency install succeeds.'}</p></div>
                 <div className="pipeline-step locked"><strong>5. Runtime URL</strong><p className="muted">Locked until real build and runtime process succeed.</p></div>
               </div>
               <p className="footer-note">{item.profile.notes?.join(' ')}</p>
@@ -211,6 +240,7 @@ export function AppProfilesClient() {
               <div className="toolbar" style={{ marginTop: '1rem' }}>
                 <button className={`btn ${workspaceDone ? 'complete' : profileDone ? 'ready-next' : ''}`} type="button" disabled={running || !profileDone} onClick={() => prepareWorkspace(item.profile)}>{workspaceDone ? 'Workspace ready' : 'Prepare workspace'}</button>
                 {workspaceDone && <button className={`btn ${installDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || installDone} onClick={() => installDependencies(item.profile)}>{installDone ? 'Dependencies installed' : 'Install dependencies'}</button>}
+                {installDone && <button className={`btn ${buildDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || buildDone} onClick={() => runBuild(item.profile)}>{buildDone ? 'Build complete' : 'Run build'}</button>}
                 {item.workload.log_path && <a className="btn secondary" href="/logs">View logs</a>}
               </div>
               <p className="muted">Launch URL stays locked until real install, build, and runtime steps succeed.</p>
