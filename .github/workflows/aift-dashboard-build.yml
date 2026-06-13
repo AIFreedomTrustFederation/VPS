@@ -1,0 +1,65 @@
+name: AIFT Dashboard Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/aift-dashboard/**'
+      - '.github/workflows/aift-dashboard-build.yml'
+  pull_request:
+    paths:
+      - 'apps/aift-dashboard/**'
+      - '.github/workflows/aift-dashboard-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/aift-dashboard
+    env:
+      AIFT_REGISTRY_PATH: /tmp/aift/registry/apps.yml
+      AIFT_NODES_PATH: /tmp/aift/registry/nodes.yml
+      AIFT_TEMPLATES_PATH: /tmp/aift/registry/templates.yml
+      AIFT_BUILDS_PATH: /tmp/aift/registry/builds.yml
+      AIFT_DEPLOYMENTS_PATH: /tmp/aift/registry/deployments.yml
+      AIFT_LOG_PATH: /tmp/aift/logs
+      AIFT_DASHBOARD_TOKEN: test-dashboard-token
+      AIFT_NODE_TOKEN: test-node-token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/aift-dashboard/package.json
+
+      - name: Prepare test registries
+        run: |
+          mkdir -p /tmp/aift/registry /tmp/aift/logs
+          cp ../../registry-examples/nodes.yml /tmp/aift/registry/nodes.yml
+          cp ../../registry-examples/templates.yml /tmp/aift/registry/templates.yml
+          cp ../../registry-examples/builds.yml /tmp/aift/registry/builds.yml
+          cp ../../registry-examples/deployments.yml /tmp/aift/registry/deployments.yml
+          cat > /tmp/aift/registry/apps.yml <<'EOF'
+          apps:
+            aift-dashboard:
+              repo: https://github.com/AIFreedomTrustFederation/VPS
+              branch: main
+              domain: vps.aifreedomtrust.com
+              framework: nextjs
+              status: running
+              node: sacramento-node-001
+              trust_class: business-app
+          EOF
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build dashboard
+        run: npm run build
