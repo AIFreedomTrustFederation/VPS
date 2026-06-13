@@ -16,12 +16,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <a className="brand" href="/">AIFT Cloud</a>
           <nav className="nav-scroll">
             <a href="/apps">Apps</a>
+            <a href="/app-profiles">Profiles</a>
             <a href="/templates">Templates</a>
             <a href="/builds">Builds</a>
             <a href="/deployments">Deployments</a>
             <a href="/nodes">Nodes</a>
             <a href="/health">Health</a>
             <a href="/connect-node">Node</a>
+            <a href="/logs">Logs</a>
             <a href="/settings">Settings</a>
           </nav>
         </header>
