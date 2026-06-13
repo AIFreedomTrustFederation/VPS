@@ -1,3 +1,4 @@
+import { LocalActionsClient } from './LocalActionsClient';
 import { WebAIChatClient } from './WebAIChatClient';
 
 export default function WebAIPage() {
@@ -9,6 +10,7 @@ export default function WebAIPage() {
         <p>Chat with the local AIFT VPS assistant using repository files, node runtime folders, heartbeats, node cards, and logs as real context.</p>
       </section>
 
+      <LocalActionsClient />
       <WebAIChatClient />
     </main>
   );
