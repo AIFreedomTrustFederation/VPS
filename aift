@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+COMMAND="${1:-help}"
+SUBCOMMAND="${2:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "$COMMAND" in
+  local)
+    case "$SUBCOMMAND" in
+      primary)
+        exec bash "$SCRIPT_DIR/scripts/termux-phone-provider-node.sh"
+        ;;
+      join)
+        exec bash "$SCRIPT_DIR/scripts/termux-join-provider-node-zip.sh"
+        ;;
+      urls)
+        exec bash "$SCRIPT_DIR/scripts/print-mobile-urls.sh"
+        ;;
+      *)
+        echo "Usage: bash aift local primary|join|urls"
+        exit 1
+        ;;
+    esac
+    ;;
+  node-card)
+    shift
+    exec bash "$SCRIPT_DIR/scripts/aift-node-card.sh" "$@"
+    ;;
+  help|*)
+    cat <<'EOF'
+AIFT local command wrapper
+
+Usage:
+  bash aift local primary
+  bash aift local join
+  bash aift local urls
+  bash aift node-card export
+  bash aift node-card list
+  bash aift node-card import path/to/card
+
+Examples:
+  NODE_NAME=termux-node-002 NODE_DISPLAY="Termux Node 002" APP_PORT=3001 bash aift local join
+  NODE_NAME=termux-node-002 NODE_DISPLAY="Termux Node 002" APP_PORT=3001 bash aift node-card export
+EOF
+    ;;
+esac
