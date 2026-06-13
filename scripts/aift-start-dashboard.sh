@@ -27,6 +27,10 @@ fi
 
 ASSIGNED_PORT="$(bash scripts/aift-port-assign.sh "$SERVICE" "$PREFERRED_PORT")"
 
+if [ -f "scripts/aift-service-registry.sh" ]; then
+  APP_HOST="$HOST" bash scripts/aift-service-registry.sh register "$SERVICE" "$ASSIGNED_PORT" >/dev/null || true
+fi
+
 if [ ! -d "$APP_DIR" ]; then
   printf '[AIFT VPS] Dashboard app not found: %s\n' "$APP_DIR"
   exit 1
