@@ -1,0 +1,77 @@
+aift_vps_shell:
+  brand: AIFT VPS
+  product: AIFT VPS Node App
+  purpose: App-controlled provider node shell for AIFT VPS.
+
+  node_app_screens:
+    - id: welcome
+      title: Welcome
+      purpose: Explain AIFT VPS and let the owner join the network.
+    - id: node_identity
+      title: Node Identity
+      purpose: Create a node name, class, and local identity.
+    - id: runtime_setup
+      title: Runtime Setup
+      purpose: Prepare the bundled runtime.
+    - id: provider_mode
+      title: Provider Mode
+      purpose: Choose participation rules.
+    - id: start_node
+      title: Start Node
+      purpose: Start the local node service.
+    - id: node_online
+      title: Node Online
+      purpose: Show status, dashboard link, and heartbeat.
+    - id: projects
+      title: Projects
+      purpose: Show local projects connected to this node.
+    - id: builds
+      title: Builds
+      purpose: Show preview build status.
+    - id: releases
+      title: Releases
+      purpose: Show published release history.
+    - id: nodes
+      title: Nodes
+      purpose: Show discovered and connected nodes.
+    - id: logs
+      title: Logs
+      purpose: Show runtime, project, and node logs.
+    - id: disclosure
+      title: Disclosure
+      purpose: Show where workloads run.
+    - id: settings
+      title: Settings
+      purpose: Owner controls, runtime updates, and node settings.
+
+  dashboard_pages:
+    - /
+    - /apps
+    - /new
+    - /templates
+    - /builds
+    - /deployments
+    - /nodes
+    - /logs
+    - /discovered-nodes
+    - /settings
+    - /disclosures/[app]
+
+  project_flow:
+    - create_project
+    - choose_template
+    - connect_source
+    - configure_build
+    - choose_workload_level
+    - choose_node_policy
+    - build_preview
+    - review_logs
+    - publish_release
+    - review_disclosure
+
+  workload_levels:
+    - level_1_static
+    - level_2_frontend_build
+    - level_3_dynamic_preview
+    - level_4_background_job
+    - level_5_stateful_verified_only
