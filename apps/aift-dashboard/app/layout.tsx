@@ -15,6 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <header className="topbar">
           <a className="brand" href="/">AIFT Cloud</a>
           <nav className="nav-scroll">
+            <a href="/aft">AFT URLs</a>
             <a href="/domains">Domains</a>
             <a href="/sites">Sites</a>
             <a href="/dns">DNS</a>
