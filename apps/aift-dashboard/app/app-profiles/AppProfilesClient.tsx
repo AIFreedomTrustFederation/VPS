@@ -22,6 +22,9 @@ type ProfileResult = {
     workspace_path?: string;
     log_path?: string;
     preview_url?: string;
+    repo_status?: string;
+    ahead?: number;
+    behind?: number;
   };
 };
 
@@ -45,6 +48,15 @@ function isBuildReady(workload: ProfileResult['workload']) {
 
 function isLocalReady(workload: ProfileResult['workload']) {
   return workload.status === 'preview-running' && Boolean(workload.preview_url);
+}
+
+function syncText(workload: ProfileResult['workload']) {
+  if (!workload.repo_status) return 'Not checked yet';
+  if (workload.repo_status === 'up-to-date') return 'Up to date with GitHub';
+  if (workload.repo_status === 'behind') return `Behind GitHub by ${workload.behind || 0} commit(s)`;
+  if (workload.repo_status === 'ahead') return `Ahead of GitHub by ${workload.ahead || 0} commit(s)`;
+  if (workload.repo_status === 'diverged') return 'Local workspace has diverged from GitHub';
+  return workload.repo_status;
 }
 
 export function AppProfilesClient() {
@@ -109,8 +121,8 @@ export function AppProfilesClient() {
 
   async function prepareWorkspace(profile: ProfileResult['profile']) {
     setRunning(true);
-    setMessage('Preparing real local workspace...');
-    setTerminal({ title: 'Prepare workspace', plain: 'The node is cloning or updating the real GitHub repository inside the local AIFT workspace.', output: 'Starting git workspace operation...' });
+    setMessage('Checking workspace against GitHub...');
+    setTerminal({ title: 'Sync workspace', plain: 'The node is checking whether the local workspace is current, behind, ahead, or diverged before updating safely.', output: 'Starting workspace sync check...' });
     const response = await fetch('/api/workspaces/prepare', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -119,15 +131,15 @@ export function AppProfilesClient() {
     const data = await response.json();
 
     if (!data.ok) {
-      setMessage(data.error || 'Workspace preparation failed. Check logs.');
-      setTerminal({ title: 'Workspace failed', plain: 'The real git workspace was not prepared. The install step remains locked.', output: data.terminal || JSON.stringify(data, null, 2) });
+      setMessage(data.error || 'Workspace sync failed. Check logs.');
+      setTerminal({ title: 'Workspace sync failed', plain: 'The workspace could not be safely updated. Read the repo status and terminal output before retrying.', output: data.terminal || JSON.stringify(data, null, 2) });
       setRunning(false);
       return;
     }
 
     setResults((current) => current.map((item) => item.profile.id === profile.id ? { ...item, workload: data.workspace } : item));
-    setMessage(`Workspace ready: ${data.workspace.workspace_path}`);
-    setTerminal({ title: 'Workspace ready', plain: 'The real repository is now present on this node. Dependency installation is unlocked.', output: data.terminal || JSON.stringify(data.workspace, null, 2) });
+    setMessage(`${syncText(data.workspace)}: ${data.workspace.workspace_path}`);
+    setTerminal({ title: 'Workspace synced', plain: `${syncText(data.workspace)}. Dependency installation can run against this workspace.`, output: data.terminal || JSON.stringify(data.workspace, null, 2) });
     setRunning(false);
   }
 
@@ -251,10 +263,11 @@ export function AppProfilesClient() {
                 <span>Framework: {item.profile.framework}</span>
                 <span>Package manager: {item.profile.package_manager}</span>
                 <span>Workload: {item.workload.status}</span>
+                <span>Repo: {syncText(item.workload)}</span>
               </div>
               <div className="pipeline-steps">
                 <div className={`pipeline-step ${profileDone ? 'complete' : ''}`}><strong>1. Profile</strong><p className="muted">{profileDone ? 'Complete. Repository files were analyzed.' : 'Create the profile first.'}</p></div>
-                <div className={`pipeline-step ${workspaceDone ? 'complete' : profileDone ? '' : 'locked'}`}><strong>2. Workspace</strong><p className="muted">{workspaceDone ? 'Complete. Real repo workspace is ready.' : 'Locked until profile is ready.'}</p></div>
+                <div className={`pipeline-step ${workspaceDone ? 'complete' : profileDone ? '' : 'locked'}`}><strong>2. Workspace</strong><p className="muted">{workspaceDone ? syncText(item.workload) : 'Locked until profile is ready.'}</p></div>
                 <div className={`pipeline-step ${installDone ? 'complete' : workspaceDone ? '' : 'locked'}`}><strong>3. Dependencies</strong><p className="muted">{installDone ? 'Complete. Dependencies installed.' : 'Locked until workspace is ready.'}</p></div>
                 <div className={`pipeline-step ${buildDone ? 'complete' : installDone ? '' : 'locked'}`}><strong>4. Build</strong><p className="muted">{buildDone ? 'Complete. Real build succeeded.' : 'Locked until dependency install succeeds.'}</p></div>
                 <div className={`pipeline-step ${localDone ? 'complete' : buildDone ? '' : 'locked'}`}><strong>5. Local URL</strong><p className="muted">{localDone ? 'Complete. Real local URL is running.' : 'Locked until real build succeeds.'}</p></div>
@@ -269,7 +282,7 @@ export function AppProfilesClient() {
                 {item.workload.preview_url && <div className="row-card" style={{ gap: '.75rem' }}><strong>Local URL:</strong><a href={item.workload.preview_url}>{item.workload.preview_url}</a></div>}
               </div>
               <div className="toolbar" style={{ marginTop: '1rem' }}>
-                <button className={`btn ${workspaceDone ? 'complete' : profileDone ? 'ready-next' : ''}`} type="button" disabled={running || !profileDone} onClick={() => prepareWorkspace(item.profile)}>{workspaceDone ? 'Workspace ready' : 'Prepare workspace'}</button>
+                <button className={`btn ${workspaceDone ? 'complete' : profileDone ? 'ready-next' : ''}`} type="button" disabled={running || !profileDone} onClick={() => prepareWorkspace(item.profile)}>{workspaceDone ? 'Sync workspace' : 'Prepare workspace'}</button>
                 {workspaceDone && <button className={`btn ${installDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || installDone} onClick={() => installDependencies(item.profile)}>{installDone ? 'Dependencies installed' : 'Install dependencies'}</button>}
                 {installDone && <button className={`btn ${buildDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || buildDone} onClick={() => runBuild(item.profile)}>{buildDone ? 'Build complete' : 'Run build'}</button>}
                 {buildDone && <button className={`btn ${localDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || localDone} onClick={() => startLocalUrl(item.profile)}>{localDone ? 'Local URL running' : 'Start local URL'}</button>}
