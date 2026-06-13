@@ -1,12 +1,21 @@
-# AIFT Node App
+# AIFT VPS Node App
 
-AIFT Node App is the planned cross-platform device application for the AI Freedom Trust decentralized provider network.
+AIFT VPS Node App is the planned cross-platform device application for the AIFT VPS decentralized provider network.
 
-It will replace one-off scripts with a real app experience for phones, tablets, laptops, desktops, mini PCs, VPS servers, and bare-metal servers.
+It will replace one-off proof scripts with a real app experience for phones, tablets, laptops, desktops, mini PCs, VPS servers, and bare-metal servers.
+
+## Product identity
+
+```text
+AIFT VPS Node App = installed provider-node app
+AIFT VPS Dashboard = control center
+Bundled runtime = local Linux-style engine
+AIFT Node Core = shared action model
+```
 
 ## Purpose
 
-The node app lets a device join the AIFT network as a provider node.
+The node app lets a device join the AIFT VPS network as a provider node.
 
 It should support:
 
@@ -16,6 +25,46 @@ It should support:
 - local mini PCs
 - always-on servers
 - VPS nodes
+
+## Selected runtime direction
+
+The selected production direction is a bundled Linux-style runtime.
+
+The app should not require normal users to manually install Termux. Termux remains the proof and developer runtime, while the production app bundles or manages its own runtime internally.
+
+## First perfect milestone
+
+The first thing to make perfect is the AIFT VPS Node App Foundation:
+
+```text
+1. Runtime Contract
+2. Node App Screen Flow
+3. Node Core Action List
+```
+
+Foundation docs:
+
+```text
+docs/runtime-contract.md
+docs/node-app-screen-flow.md
+docs/bundled-runtime-node-app.md
+packages/aift-node-core/README.md
+apps/aift-node-app/foundation-checklist.yml
+```
+
+## First-launch flow
+
+```text
+Install app
+Open app
+Create node identity
+Prepare bundled runtime
+Choose provider mode
+Start local node
+Write heartbeat
+Show node online
+Open local dashboard
+```
 
 ## Responsibilities
 
@@ -29,7 +78,6 @@ The node app should handle:
 - resource reporting
 - capability reporting
 - approved workload levels
-- safe job execution
 - result reporting
 - pause and resume
 - local dashboard link
@@ -43,7 +91,9 @@ Current proof mode uses Termux scripts:
 scripts/aift-termux.sh
 scripts/termux-phone-provider-node.sh
 scripts/termux-join-provider-node-zip.sh
+scripts/aift-heartbeat.sh
 scripts/aift-node-card.sh
+scripts/aift-discover.sh
 ```
 
 ## Future package options
@@ -71,6 +121,7 @@ Shared web dashboard UI where possible
 ```text
 phone-experimental
 phone-plugged-in
+tablet-node
 laptop-worker
 desktop-worker
 mini-pc-node
@@ -78,14 +129,34 @@ server-node
 verified-provider-node
 ```
 
-## First production milestone
+## First app shell screens
 
-Create a minimal node app shell that can:
+The first app shell should model these screens:
 
-1. show node identity
-2. show local URL
-3. show health
-4. export node card
-5. import node card
-6. report heartbeat to a control plane
-7. display allowed workload levels
+```text
+Welcome
+Node Identity
+Runtime Setup
+Provider Mode
+Start Node
+Node Online
+Discovery
+Logs
+Settings
+```
+
+## What comes after the foundation
+
+After the foundation is perfect, build:
+
+```text
+1. app shell mockup
+2. local runtime installer screen
+3. node identity storage
+4. dashboard start and stop controls
+5. heartbeat loop
+6. local logs viewer
+7. discovery view
+8. control-plane enrollment
+9. signed job runner
+```
