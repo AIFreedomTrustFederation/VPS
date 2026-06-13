@@ -8,6 +8,8 @@ type Output = {
   ok: boolean | null;
 };
 
+const handoffUrl = 'http://127.0.0.1:3999';
+
 async function runAction(action: string) {
   const response = await fetch('/api/local-actions', {
     method: 'POST',
@@ -31,7 +33,7 @@ export function DashboardUpdateClient() {
 
   async function restartDashboard() {
     setBusy('restart');
-    setOutput({ title: 'Restarting dashboard', text: 'Scheduling the dashboard server restart. Reload the browser after a few seconds.', ok: null });
+    setOutput({ title: 'Starting handoff and restarting dashboard', text: `Opening the handoff URL before restart is recommended: ${handoffUrl}`, ok: null });
     const data = await runAction('restart-dashboard');
     setOutput({ title: data.ok ? 'Dashboard restart scheduled' : 'Dashboard restart needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
     setBusy('');
@@ -40,8 +42,9 @@ export function DashboardUpdateClient() {
   return (
     <section className="panel-card">
       <h2>Dashboard update</h2>
-      <p className="muted">Use these buttons to update the AIFT dashboard itself from the running app.</p>
+      <p className="muted">Use these buttons to update the whole AIFT dashboard. The handoff page stays available while the dashboard process restarts.</p>
       <div className="toolbar">
+        <a className="btn complete" href={handoffUrl}>Open handoff page</a>
         <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={updateFiles}>{busy === 'update' ? 'Updating...' : 'Update dashboard files'}</button>
         <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={restartDashboard}>{busy === 'restart' ? 'Restarting...' : 'Restart dashboard'}</button>
         <a className="btn secondary" href="/logs">Open logs</a>
@@ -49,7 +52,7 @@ export function DashboardUpdateClient() {
       {output && (
         <div className="log-panel">
           <h4>{output.title}</h4>
-          <div className="explainer">{output.ok === true ? 'Complete. Reload the browser if this changed the running UI.' : output.ok === false ? 'The action did not complete. Read the terminal output below.' : 'Running...'}</div>
+          <div className="explainer">{output.ok === true ? `Complete. Use the handoff page at ${handoffUrl} until it says the dashboard is ready.` : output.ok === false ? 'The action did not complete. Read the terminal output below.' : 'Running...'}</div>
           <pre>{output.text}</pre>
         </div>
       )}
