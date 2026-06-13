@@ -70,4 +70,36 @@ jobs:
         run: npm install
 
       - name: Build dashboard
-        run: npm run build
+        id: dashboard_build
+        continue-on-error: true
+        run: |
+          mkdir -p ../../ops/build-reports
+          npm run build > ../../ops/build-reports/dashboard-build.log 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Write build status report
+        if: always()
+        run: |
+          mkdir -p ../../ops/build-reports
+          {
+            echo "# AIFT Dashboard Build Report"
+            echo ""
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_RUN_ID"
+            echo "Exit code: ${{ steps.dashboard_build.outputs.exit_code }}"
+            echo ""
+            echo "Status: $([ '${{ steps.dashboard_build.outputs.exit_code }}' = '0' ] && echo 'passed' || echo 'failed')"
+          } > ../../ops/build-reports/latest-dashboard-build.md
+
+      - name: Upload build report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aift-dashboard-build-report
+          path: |
+            ops/build-reports/latest-dashboard-build.md
+            ops/build-reports/dashboard-build.log
+
+      - name: Fail if dashboard build failed
+        if: steps.dashboard_build.outputs.exit_code != '0'
+        run: exit 1
