@@ -22,11 +22,18 @@ type ProfileResult = {
   };
 };
 
+type LinkMap = Record<string, string>;
+
+function linkFor(profile: ProfileResult['profile']) {
+  return `/app-links/app-${profile.id.replace(/^profile-/, '')}`;
+}
+
 export function AppProfilesClient() {
   const [running, setRunning] = useState(false);
   const [repoUrl, setRepoUrl] = useState('');
   const [results, setResults] = useState<ProfileResult[]>([]);
   const [message, setMessage] = useState('');
+  const [links, setLinks] = useState<LinkMap>({});
 
   async function generateAll() {
     setRunning(true);
@@ -75,6 +82,12 @@ export function AppProfilesClient() {
     setRunning(false);
   }
 
+  function assignLaunchLink(profile: ProfileResult['profile']) {
+    const href = linkFor(profile);
+    setLinks((current) => ({ ...current, [profile.id]: href }));
+    setMessage(`Launch link assigned: ${href}`);
+  }
+
   async function loadCollections() {
     const response = await fetch('/api/engine/collections', { cache: 'no-store' });
     if (!response.ok) return;
@@ -108,7 +121,9 @@ export function AppProfilesClient() {
       </div>
       {message && <p className="muted">{message}</p>}
       <div className="app-list">
-        {results.length === 0 ? <div className="card metric"><span>No app profiles yet.</span><strong>0</strong></div> : results.map((item) => (
+        {results.length === 0 ? <div className="card metric"><span>No app profiles yet.</span><strong>0</strong></div> : results.map((item) => {
+          const href = links[item.profile.id];
+          return (
           <article className="card app-card" key={item.profile.id}>
             <div>
               <h3>{item.profile.repo}</h3>
@@ -124,10 +139,15 @@ export function AppProfilesClient() {
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Dev:</strong><span>{item.profile.dev_command || 'Not detected'}</span></div>
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Verify:</strong><span>{item.profile.verify_command || 'Not detected'}</span></div>
               </div>
+              <div className="toolbar" style={{ marginTop: '1rem' }}>
+                <button className="btn" type="button" onClick={() => assignLaunchLink(item.profile)}>Assign launch link</button>
+                {href && <a className="btn secondary" href={href}>Open launch link</a>}
+              </div>
+              {href && <p className="muted">Assigned URL: {href}</p>}
             </div>
             <span className={`status ${item.profile.profile_ready ? 'successful' : 'pending'}`}>{item.profile.profile_ready ? 'Ready' : 'Review'}</span>
           </article>
-        ))}
+        );})}
       </div>
     </section>
   );
