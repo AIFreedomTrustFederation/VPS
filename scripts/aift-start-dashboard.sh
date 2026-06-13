@@ -8,6 +8,8 @@ PREFERRED_PORT="${APP_PORT:-3001}"
 SERVICE="${AIFT_SERVICE:-dashboard}"
 AIFT_HOME_DIR="${AIFT_HOME:-$HOME/.aift-webai}"
 RUNTIME_DIR="$AIFT_HOME_DIR/runtime"
+LOG_DIR="$AIFT_HOME_DIR/logs"
+HANDOFF_PORT="${AIFT_HANDOFF_PORT:-3999}"
 
 printf '\n[AIFT VPS] Start dashboard with automatic port assignment\n'
 printf '[AIFT VPS] Node dir: %s\n' "$NODE_DIR"
@@ -29,6 +31,19 @@ fi
 
 ASSIGNED_PORT="$(bash scripts/aift-port-assign.sh "$SERVICE" "$PREFERRED_PORT")"
 
+mkdir -p "$RUNTIME_DIR" "$LOG_DIR"
+
+if [ -f "scripts/aift-sync-handoff-server.mjs" ]; then
+  if ! command -v node >/dev/null 2>&1; then
+    printf '[AIFT VPS] Node.js is missing; handoff export server was not started.\n'
+  elif ! (echo > "/dev/tcp/127.0.0.1/$HANDOFF_PORT") >/dev/null 2>&1; then
+    AIFT_HOME="$AIFT_HOME_DIR" APP_PORT="$ASSIGNED_PORT" AIFT_HANDOFF_PORT="$HANDOFF_PORT" node scripts/aift-sync-handoff-server.mjs > "$LOG_DIR/sync-handoff.log" 2>&1 &
+    printf '[AIFT VPS] Handoff/export URL: http://127.0.0.1:%s\n' "$HANDOFF_PORT"
+  else
+    printf '[AIFT VPS] Handoff/export URL already running: http://127.0.0.1:%s\n' "$HANDOFF_PORT"
+  fi
+fi
+
 if [ -f "scripts/aift-service-registry.sh" ]; then
   APP_HOST="$HOST" bash scripts/aift-service-registry.sh register "$SERVICE" "$ASSIGNED_PORT" >/dev/null || true
 fi
@@ -41,7 +56,6 @@ fi
 RUNNING_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 RUNNING_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-mkdir -p "$RUNTIME_DIR"
 printf '{"running_commit":"%s","running_branch":"%s","started_at":"%s","host":"%s","port":"%s"}\n' "$RUNNING_COMMIT" "$RUNNING_BRANCH" "$STARTED_AT" "$HOST" "$ASSIGNED_PORT" > "$RUNTIME_DIR/dashboard-running.json"
 
 cd "$APP_DIR"
@@ -56,6 +70,7 @@ printf '{"state":"ready","message":"Dashboard is ready. Return to AIFT Cloud.","
 
 printf '\n[AIFT VPS] Dashboard assigned port: %s\n' "$ASSIGNED_PORT"
 printf '[AIFT VPS] Local URL: http://%s:%s\n' "$HOST" "$ASSIGNED_PORT"
+printf '[AIFT VPS] Export logs: http://127.0.0.1:%s/export\n' "$HANDOFF_PORT"
 printf '[AIFT VPS] Running commit: %s\n\n' "$RUNNING_COMMIT"
 
 exec npx next dev --webpack --hostname "$HOST" --port "$ASSIGNED_PORT"
