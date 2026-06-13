@@ -98,6 +98,27 @@ export function AppProfilesClient() {
     setRunning(false);
   }
 
+  async function installDependencies(profile: ProfileResult['profile']) {
+    setRunning(true);
+    setMessage('Installing dependencies in the real workspace...');
+    const response = await fetch('/api/workspaces/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profileId: profile.id }),
+    });
+    const data = await response.json();
+
+    if (!data.ok) {
+      setMessage(data.error || 'Dependency installation failed. Check logs.');
+      setRunning(false);
+      return;
+    }
+
+    setResults((current) => current.map((item) => item.profile.id === profile.id ? { ...item, workload: data.workload } : item));
+    setMessage(`Dependencies installed for ${profile.repo}.`);
+    setRunning(false);
+  }
+
   async function loadCollections() {
     const response = await fetch('/api/engine/collections', { cache: 'no-store' });
     if (!response.ok) return;
@@ -150,6 +171,7 @@ export function AppProfilesClient() {
               </div>
               <div className="toolbar" style={{ marginTop: '1rem' }}>
                 <button className="btn" type="button" disabled={running} onClick={() => prepareWorkspace(item.profile)}>Prepare workspace</button>
+                {item.workload.workspace_path && <button className="btn" type="button" disabled={running} onClick={() => installDependencies(item.profile)}>Install dependencies</button>}
                 {item.workload.log_path && <a className="btn secondary" href="/logs">View logs</a>}
               </div>
               <p className="muted">Launch URL stays locked until real install, build, and runtime steps succeed.</p>
