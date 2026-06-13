@@ -1,0 +1,69 @@
+schema: aift.node.v1
+required:
+  - node
+
+node:
+  required:
+    - name
+    - operator_class
+    - region
+    - trust_level
+    - supports
+  fields:
+    name:
+      type: string
+      example: sacramento-node-001
+    operator:
+      type: string
+      example: AI Freedom Trust Federation
+    operator_class:
+      type: enum
+      allowed:
+        - managed
+        - verified-community
+        - self-hosted
+    region:
+      type: string
+      example: us-west
+    trust_level:
+      type: enum
+      allowed:
+        - verified
+        - community
+        - self-hosted
+        - development
+    public_hostname:
+      type: string
+      example: node-001.aiftcloud.com
+    supports:
+      type: array
+      allowed:
+        - static
+        - vite
+        - nextjs
+        - node
+        - fastapi
+        - docker
+        - docker-compose
+    resources:
+      fields:
+        cpu_cores:
+          type: integer
+        memory_gb:
+          type: integer
+        storage_gb:
+          type: integer
+    disclosure:
+      fields:
+        public_node_identity:
+          type: boolean
+        public_operator_class:
+          type: boolean
+        public_region:
+          type: boolean
+
+rules:
+  - Every node must disclose operator class.
+  - Every node must disclose region at minimum.
+  - Sensitive workloads may only run on managed nodes until higher trust verification exists.
+  - Community nodes must not receive production secrets by default.
