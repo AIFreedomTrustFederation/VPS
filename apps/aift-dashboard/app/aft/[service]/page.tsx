@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { browserSafeServiceUrl, getAftService, httpsAftUrl, localAftGatewayUrl } from '@/lib/aft-service-registry';
 
 type Props = {
@@ -37,11 +37,4 @@ export default async function AftServicePage({ params }: Props) {
       </nav>
     </main>
   );
-}
-
-export async function openAftServiceAction(formData: FormData) {
-  'use server';
-  const service = String(formData.get('service') || 'dashboard');
-  const record = getAftService(service);
-  if (record) redirect(record.route);
 }
