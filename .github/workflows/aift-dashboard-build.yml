@@ -28,6 +28,8 @@ jobs:
       AIFT_LOG_PATH: /tmp/aift/logs
       AIFT_DASHBOARD_TOKEN: test-dashboard-token
       AIFT_NODE_TOKEN: test-node-token
+      COOLIFY_URL: https://example.invalid
+      COOLIFY_API_TOKEN: test-coolify-token
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,6 +59,12 @@ jobs:
               node: sacramento-node-001
               trust_class: business-app
           EOF
+
+      - name: Verify health files exist
+        run: |
+          test -f app/api/health/route.ts
+          test -f app/health/page.tsx
+          test -f lib/health.ts
 
       - name: Install dependencies
         run: npm install
