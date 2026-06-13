@@ -7,9 +7,45 @@ type LocalAction = {
   label: string;
 };
 
+type ConsoleState = {
+  percent: number;
+  ok: boolean | null;
+  title: string;
+  explanation: string;
+  next: string;
+  terminal: string;
+};
+
+function firstSignal(text: string) {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  return lines.find((line) => /error|failed|fatal|denied|missing|not found|unable/i.test(line)) || lines[0] || 'No output returned.';
+}
+
+function explain(ok: boolean, action: string, text: string): ConsoleState {
+  if (ok) {
+    return {
+      percent: 100,
+      ok,
+      title: 'Complete',
+      explanation: `${action} finished successfully. The node can move to the next step.`,
+      next: 'Continue with the next available button or review the logs.',
+      terminal: text,
+    };
+  }
+
+  return {
+    percent: 50,
+    ok,
+    title: 'Needs attention',
+    explanation: `The node stopped at: ${firstSignal(text)}`,
+    next: 'Fix that first issue, then run the button again.',
+    terminal: text,
+  };
+}
+
 export function LocalActionsClient() {
   const [actions, setActions] = useState<LocalAction[]>([]);
-  const [terminal, setTerminal] = useState('');
+  const [consoleState, setConsoleState] = useState<ConsoleState | null>(null);
   const [running, setRunning] = useState('');
 
   async function loadActions() {
@@ -23,9 +59,9 @@ export function LocalActionsClient() {
     loadActions();
   }, []);
 
-  async function run(action: string) {
+  async function run(action: string, label: string) {
     setRunning(action);
-    setTerminal(`Running ${action}...`);
+    setConsoleState({ percent: 15, ok: null, title: 'Running', explanation: `${label} has started on this Termux node.`, next: 'Wait for the real output.', terminal: `Starting ${label}...` });
 
     const response = await fetch('/api/local-actions', {
       method: 'POST',
@@ -34,23 +70,32 @@ export function LocalActionsClient() {
     });
 
     const data = await response.json();
-    setTerminal(data.terminal || data.error || 'No output returned.');
+    const terminal = data.terminal || data.error || 'No output returned.';
+    setConsoleState(explain(Boolean(data.ok), label, terminal));
     setRunning('');
   }
 
   return (
     <section className="panel-card">
-      <h2>Node actions</h2>
-      <p className="muted">Run approved local actions and show the terminal output here.</p>
+      <h2>Termux Command Center</h2>
+      <p className="muted">Run approved local actions. Each result shows a progress percentage, a plain-language explanation, and the real terminal output.</p>
       <div className="toolbar">
         {actions.map((action) => (
-          <button className="btn secondary" key={action.id} type="button" disabled={Boolean(running)} onClick={() => run(action.id)}>
+          <button className={`btn ${consoleState?.ok && !running ? 'complete' : 'secondary'}`} key={action.id} type="button" disabled={Boolean(running)} onClick={() => run(action.id, action.label)}>
             {running === action.id ? 'Running...' : action.label}
           </button>
         ))}
       </div>
-      {terminal && (
-        <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', border: '1px solid rgba(255,255,255,.12)', borderRadius: '1rem', padding: '1rem', background: 'rgba(0,0,0,.35)' }}>{terminal}</pre>
+      {consoleState && (
+        <div className="log-panel">
+          <h4>{consoleState.title} · {consoleState.percent}%</h4>
+          <div className="explainer">
+            <strong>{consoleState.explanation}</strong>
+            <br />
+            {consoleState.next}
+          </div>
+          <pre>{consoleState.terminal}</pre>
+        </div>
       )}
     </section>
   );
