@@ -1,8 +1,8 @@
 # AI Freedom Trust Cloud App Foundry
 
-AI Freedom Trust Cloud App Foundry is a mobile-first, open-source, decentralized VPS cloud, website builder, domain control panel, and future `.aft` registry system.
+AI Freedom Trust Cloud App Foundry is a mobile-first, open-source, decentralized VPS cloud, app builder, domain control panel, provider-node network, and future `.aft` registry system.
 
-This repository is the source of truth for building the AFT cloud from the ground up. We will follow this README as the operating roadmap. Every new feature should support the mission below, and every phase should be completed in order before moving too far ahead.
+This repository is the source of truth for building AIFT Cloud from the ground up. Every new feature should support the mission below, and every phase should move us closer to a real decentralized cloud that can host applications, route names, disclose infrastructure, and reduce dependence on centralized registries, centralized clouds, and centralized DNS control points.
 
 ---
 
@@ -10,15 +10,56 @@ This repository is the source of truth for building the AFT cloud from the groun
 
 Build an open, transparent, decentralized web provider where users can:
 
-- reserve and manage AFT domains and future `.aft` names;
-- build websites with templates, WebAI, or imported code;
-- deploy sites and apps to the AFT decentralized VPS cloud;
-- manage DNS-like records, redirects, SSL, hosting, deployments, backups, and analytics;
-- see exactly where every site runs through node disclosure;
-- keep websites online through blue/green deploys and fallback nodes;
-- grow toward a real ICANN-ready `.aft` registry operator system.
+- reserve and manage AFT domains, local names, and future `.aft` names;
+- build websites and apps with templates, WebAI, imported GitHub code, or local source folders;
+- deploy sites and apps to the AIFT decentralized VPS cloud;
+- turn phones, laptops, desktops, VPS servers, bare metal, and community hardware into provider nodes;
+- manage DNS-like records, service records, redirects, SSL, hosting, deployments, backups, logs, analytics, and rollback;
+- see exactly where every site or app runs through node disclosure and signed service records;
+- keep websites online through health checks, blue/green deploys, fallback nodes, and portable app profiles;
+- grow toward a decentralized naming and routing layer that can operate as an open alternative to centralized ICANN-style dependency.
 
-The end goal is an AFT provider console that feels as complete as a traditional domain registrar, DNS provider, website builder, and hosting company, but powered by a decentralized VPS cloud instead of one centralized hosting stack.
+The end goal is an AIFT provider console that feels as complete as a traditional domain registrar, DNS provider, website builder, hosting provider, deployment platform, and cloud control panel, but powered by a decentralized VPS network instead of one centralized hosting stack.
+
+---
+
+## Decentralized naming vision
+
+AIFT is not only a VPS dashboard. It is the foundation for a community-governed naming, routing, and hosting network.
+
+Today, most of the public web depends on centralized registries, registrars, DNS operators, certificate authorities, hosting platforms, and cloud providers. AIFT is building toward an alternative stack where identity, names, routes, deployments, and service records can be verified by an open network instead of controlled by a single gatekeeper.
+
+The long-term vision is a decentralized ICANN alternative in practical phases:
+
+```text
+Local-first names
+  -> signed service records
+  -> provider-node routing
+  -> public gateway resolution
+  -> community registry governance
+  -> portable domain and app ownership
+  -> decentralized naming layer
+```
+
+This does not require pretending the current internet disappears overnight. AIFT should interoperate with normal DNS, normal domains, and normal browsers while building a parallel path for names and services that can be resolved through AIFT gateways, provider nodes, signed records, and community-governed registries.
+
+The system should eventually support:
+
+- human-readable names that resolve through AIFT gateways and node records;
+- signed ownership records for sites, apps, names, deployments, and providers;
+- portable app profiles that can move across nodes without losing identity;
+- transparent node disclosure so users know where a service actually runs;
+- community policy for reserved names, abuse review, transfers, and disputes;
+- bridges between ordinary DNS domains and decentralized AIFT names;
+- an open registry model that can become a real alternative to centralized naming authority.
+
+AIFT should therefore be designed as both:
+
+```text
+A decentralized cloud provider
+and
+A decentralized naming and routing authority
+```
 
 ---
 
@@ -39,30 +80,39 @@ No feature should bypass this model.
 
 ## Product vision
 
-AFT will become one unified control panel for:
+AIFT will become one unified control panel for:
 
 ```text
 Domains
+AIFT names
 Sites
-DNS
+Apps
+DNS-like records
+Signed service records
 WebAI Builder
 Deployments
-Nodes
+Provider nodes
+Logs
 Analytics
 Registry Governance
 Settings
 ```
 
-Users should be able to open the dashboard and do the full domain-to-website lifecycle:
+Users should be able to open the dashboard and do the full name-to-app lifecycle:
 
 ```text
-Search or reserve a domain
-  -> build a website
-  -> connect the domain
-  -> deploy to AFT cloud
+Search or reserve a name
+  -> create or import an app
+  -> generate an app profile
+  -> prepare a workspace
+  -> install dependencies
+  -> build the app
+  -> start a local or provider-node runtime
+  -> connect a domain or AIFT name
+  -> route through the gateway
   -> pass health checks
   -> go live
-  -> monitor analytics and uptime
+  -> monitor logs, analytics, sync, and uptime
   -> roll back safely if needed
 ```
 
@@ -81,8 +131,10 @@ Working foundation pieces include:
 - Local node logs.
 - Mobile URL printer.
 - Node card export/import helpers.
-- App, template, build, deployment, node, sync, logs, readiness, and WebAI dashboard routes.
+- App, template, build, deployment, node, sync, controls, logs, readiness, WebAI, and app profile dashboard routes.
 - Native AFT Site Registry foundation.
+- Dashboard sync flow with update, restart, readiness, and reload status.
+- GitHub app-source intake and local workspace build pipeline.
 - Documentation for the native site registry in `docs/aft-site-registry.md`.
 
 The first proven node model is:
@@ -100,18 +152,24 @@ Production hosting should prioritize verified servers and trusted always-on node
 
 ```text
 AIFT Dashboard
+  -> Sync Center
+  -> Controls Center
   -> Domains UI
   -> Sites UI
+  -> App Profiles UI
   -> WebAI Builder
   -> DNS Manager
+  -> Service Records Manager
   -> Deployment Console
   -> Node Console
   -> Registry Admin Console
 
-AFT Site and Domain Registry
+AFT Site, App, and Name Registry
   -> site ownership
-  -> domain reservations
+  -> app ownership
+  -> name reservations
   -> DNS-like records
+  -> signed service records
   -> active deployment records
   -> fallback deployment records
   -> disclosure records
@@ -129,17 +187,20 @@ AIFT Node Agent
   -> syncs artifacts and mirrors
 
 AIFT Gateway
-  -> resolves domains and slugs
+  -> resolves domains, names, and slugs
   -> routes to healthy deployments
   -> performs blue/green handoff
   -> serves fallback deployment when needed
+  -> exposes signed disclosure data
 
 AFT Registry Governance
   -> reserved names
   -> abuse review
   -> ownership transfer
   -> policy enforcement
-  -> future ICANN readiness
+  -> dispute resolution
+  -> decentralized naming policy
+  -> future ICANN interoperability or independence
 ```
 
 ---
@@ -156,14 +217,16 @@ Goals:
 
 - Run dashboard locally on Android or VPS nodes.
 - Keep Termux compatibility.
-- Show health, apps, deployments, nodes, logs, sync, and readiness.
+- Show health, apps, deployments, nodes, logs, sync, controls, readiness, and WebAI.
 - Avoid fragile localhost assumptions when accessed from another device.
+- Update and restart the running dashboard from inside the dashboard itself.
 
 Exit criteria:
 
 - Primary node can run the dashboard.
 - Join node can run independently.
 - Logs and health pages are usable from mobile.
+- Sync Center can update dashboard files, restart the dashboard, wait for ready status, and expose a reload action.
 
 ---
 
@@ -202,424 +265,131 @@ Exit criteria:
 
 ---
 
-### Phase 2: Domain Control Panel UX
+### Phase 2: App Foundry and Provider-Node Builds
 
 Goals:
 
-Build a full provider-style dashboard for domain and website control.
+- Paste a GitHub repository URL.
+- Generate an app profile from real repository files.
+- Prepare or sync a real local workspace.
+- Install dependencies only after workspace sync succeeds.
+- Build only after dependencies succeed.
+- Start a local or provider-node runtime only after the build succeeds.
+- Show a clickable local or routed URL only after the runtime is actually responding.
+
+Required pages and routes:
+
+```text
+/app-profiles
+/source-links
+/api/app-sources
+/api/app-sources/[sourceId]
+/api/app-sources/[sourceId]/profile
+/api/workspaces/prepare
+/api/workspaces/install
+/api/workspaces/run-build
+/api/workspaces/start-preview
+```
+
+Exit criteria:
+
+- A GitHub app source can be saved.
+- A real profile can be generated.
+- Workspace sync reports whether the local repo is up to date, behind, ahead, or diverged.
+- Dependencies install from the real workspace.
+- Build output is captured in logs.
+- Runtime URL appears only when the real process has started.
+
+---
+
+### Phase 3: Domain and Name Control Panel UX
+
+Goals:
+
+Build a full provider-style dashboard for domain, name, site, and app control.
 
 Required pages:
 
 ```text
 /domains
 /domains/[domain]
+/names
+/names/[name]
 /sites
 /sites/[siteId]
+/apps
+/apps/[appId]
 /builder
 /dns
+/records
 /deployments
 /nodes
-/registry
-```
-
-Domain detail tabs:
-
-```text
-Overview
-DNS Records
-Website
-Hosting
-SSL and Security
-Email
-Redirects
-Subdomains
-Ownership
-Compliance
-Analytics
-Advanced
+/sync
+/logs
 ```
 
 Exit criteria:
 
-- Users can see every domain and site they control.
-- Users can connect a domain to a site.
-- Users can see DNS health, deployment health, hosting node, fallback status, and disclosure links.
+- Users can manage normal DNS domains and AIFT names from one control panel.
+- AIFT names can map to signed service records.
+- Public gateways can resolve AIFT records.
+- Ownership and routing changes are logged and auditable.
 
 ---
 
-### Phase 3: DNS-like records and AFT resolver
+### Phase 4: Decentralized Registry and Gateway Network
 
 Goals:
 
-Add internal DNS-style control before real `.aft` delegation.
-
-Supported record types:
-
-```text
-A
-AAAA
-CNAME
-TXT
-MX
-NS
-SRV
-CAA
-ALIAS
-AFT-LINK
-AFT-NODE
-AFT-MIRROR
-AFT-CID
-AFT-APP
-```
+- Create signed name records.
+- Create signed service records.
+- Publish gateway-readable registry snapshots.
+- Let provider nodes verify records before serving traffic.
+- Support fallback gateways and multi-node routes.
+- Define governance for reserved names, disputes, transfers, and abuse.
 
 Exit criteria:
 
-- AFT domains can resolve internally to sites and deployments.
-- Standard DNS-compatible records can be represented.
-- AFT-specific records can link domains to nodes, mirrors, CIDs, and deployments.
+- Names resolve through AIFT gateway logic.
+- Service records are signed and verifiable.
+- A node can refuse unsigned or invalid routing records.
+- The system can operate as a decentralized naming layer alongside ordinary DNS.
 
 ---
 
-### Phase 4: WebAI website builder
+## Non-negotiables
 
-Goals:
-
-Make WebAI the native builder for AFT sites.
-
-Builder modes:
-
-```text
-AI build from prompt
-Choose template
-Import from GitHub
-Upload static site
-Clone existing site
-Build business site
-Build trust portal
-Build app landing page
-```
-
-Exit criteria:
-
-- User can generate a site from a prompt.
-- User can preview before deploy.
-- Generated site creates a normal registry record and deployment record.
-- WebAI output follows the same blue/green deployment rules.
+- No fake green status.
+- No mock production data in live operational paths.
+- No hidden infrastructure claims.
+- No switching traffic until health checks pass.
+- No automatic destructive sync when a repo is ahead or diverged.
+- No browser button should pretend the node updated until the local action actually completed.
+- No reload prompt should appear until the dashboard reports ready after restart.
 
 ---
 
-### Phase 5: Decentralized node hosting
-
-Goals:
-
-Connect sites to the AFT VPS cloud node network.
-
-Node classes:
+## Near-term operator flow
 
 ```text
-Class A: verified always-on servers
-Class B: plugged-in trusted edge nodes
-Class C: mobile battery nodes
-Class D: experimental nodes
+/sync
+  -> Update dashboard files
+  -> Restart dashboard
+  -> Wait for Ready
+  -> Reload app
+
+/app-profiles
+  -> Save repo and create profile
+  -> Sync workspace
+  -> Install dependencies
+  -> Run build
+  -> Start local URL
+  -> Open app
+
+/logs
+  -> Read real output
+  -> Fix first reported issue
+  -> Retry the failed step
 ```
 
-Hosting rule:
-
-```text
-Public production websites run on Class A or trusted Class B nodes.
-Class C and D nodes may preview, cache, test, mirror, or run lightweight approved jobs.
-```
-
-Exit criteria:
-
-- Deployments have node assignments.
-- Nodes report heartbeat, capacity, runtime support, and trust class.
-- Scheduler can choose eligible nodes.
-- Gateway routes to healthy assigned nodes.
-
----
-
-### Phase 6: Gateway, failover, and blue/green deployment
-
-Goals:
-
-Make handoff seamless.
-
-Rules:
-
-```text
-Current live deployment stays online.
-New deployment builds separately.
-New deployment is health checked.
-Traffic switches only after health passes.
-Failed deployment never takes the site down.
-Fallback deployment remains available.
-```
-
-Exit criteria:
-
-- Users never see localhost errors during sync.
-- Users never see broken deployments during handoff.
-- Rollback is available from the deployment timeline.
-
----
-
-### Phase 7: Security, ownership, and disclosure
-
-Goals:
-
-Every domain and site must have transparent ownership and hosting disclosure.
-
-Required records:
-
-```text
-Owner
-Admins
-Editors
-Billing contact
-Technical contact
-Recovery contact
-Node operator
-Deployment id
-Node class
-Runtime type
-Backup status
-Monitoring status
-Audit log
-```
-
-Exit criteria:
-
-- Every site has a disclosure page.
-- Every ownership change is logged.
-- Every deployment records where it runs.
-- Domain locks and transfer locks are supported.
-
----
-
-### Phase 8: Registry governance and abuse control
-
-Goals:
-
-Prepare AFT for responsible domain operation.
-
-Admin tools:
-
-```text
-Reserved names
-Premium names
-Domain applications
-Registrants
-Abuse reports
-Disputes
-Suspensions
-Ownership transfers
-Launch phases
-Audit logs
-```
-
-Exit criteria:
-
-- Admins can reserve, approve, suspend, and transfer names.
-- Abuse reports can be filed and reviewed.
-- Domain status can be changed with an audit trail.
-
----
-
-### Phase 9: IPFS, Filecoin, and decentralized mirrors
-
-Goals:
-
-Add decentralized storage as a mirror and backup layer after the local gateway is stable.
-
-Artifact mirrors:
-
-```text
-Primary AFT node
-Fallback AFT node
-Gateway cache
-IPFS CID
-Filecoin deal
-Optional repository artifact backup
-```
-
-Exit criteria:
-
-- A deployment can be mirrored outside the primary node.
-- IPFS/Filecoin failure does not break the browser-safe gateway.
-- Mirror status is visible in the dashboard.
-
----
-
-### Phase 10: `.aft` registry readiness
-
-Goals:
-
-Prepare the system and organization for a future official `.aft` TLD application.
-
-Workstreams:
-
-```text
-Legal entity readiness
-AFT mission and eligibility policy
-Acceptable use policy
-Abuse response policy
-Trademark and reserved names policy
-Registrant agreement
-Registry operator plan
-Registrar or registrar-partner plan
-RSP integration plan
-RDAP data model
-DNSSEC plan
-Data escrow plan
-Sunrise and launch plan
-```
-
-Exit criteria:
-
-- AFT can operate an internal `.aft` namespace.
-- AFT has policy documents.
-- AFT has technical architecture for registry, DNS, RDAP, DNSSEC, and abuse handling.
-- AFT can approach an evaluated Registry Service Provider and prepare for an ICANN application window.
-
----
-
-## Development discipline
-
-We will follow this order:
-
-```text
-1. Registry foundation
-2. Serving route
-3. API routes
-4. Control panel UX
-5. DNS records
-6. Builder
-7. Node scheduler
-8. Gateway failover
-9. Governance
-10. Mirrors
-11. ICANN readiness
-```
-
-Do not build advanced AI, billing, marketplace, or public customer onboarding before the registry, serving, deployment, and failover foundation are stable.
-
----
-
-## Immediate milestone
-
-The immediate milestone is **AFT Domains and Sites v0.1**.
-
-Required work:
-
-```text
-1. Finish native site registry.
-2. Add `/s/[slug]` serving route.
-3. Add create/list/deploy API routes.
-4. Add `/sites` dashboard with real registry data.
-5. Add `/domains` dashboard skeleton.
-6. Add domain-to-site connection model.
-7. Add internal DNS record model.
-8. Add deployment status endpoint.
-9. Add rollback/fallback logic.
-10. Add disclosure page for every site.
-```
-
-When this milestone is complete, AFT will have the first working version of a domain-control and website-hosting provider panel.
-
----
-
-## Fast start: first phone as primary node
-
-Run this in Termux on the first phone:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AIFreedomTrustFederation/VPS/main/scripts/aift-termux.sh -o aift-termux.sh
-bash aift-termux.sh primary
-```
-
-Open on the same phone:
-
-```text
-http://127.0.0.1:3000/health
-http://127.0.0.1:3000/connect-node
-http://127.0.0.1:3000/nodes
-http://127.0.0.1:3000/deployments
-```
-
-Important: `127.0.0.1` only works from the same device that is running the node. Other devices must use the node's LAN IP, public URL, tunnel, or gateway URL.
-
----
-
-## Fast start: second phone or temporary node
-
-Run this in Termux on another Android device:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AIFreedomTrustFederation/VPS/main/scripts/aift-termux.sh -o aift-termux.sh
-NODE_NAME=termux-node-002 NODE_DISPLAY="Termux Node 002" APP_PORT=3001 bash aift-termux.sh join
-```
-
-Open on that second device:
-
-```text
-http://127.0.0.1:3001/health
-http://127.0.0.1:3001/connect-node
-http://127.0.0.1:3001/nodes
-http://127.0.0.1:3001/deployments
-```
-
----
-
-## Current repository structure
-
-```text
-.
-├── aift
-├── apps/
-│   ├── aift-dashboard/
-│   └── aift-node-agent/
-├── docs/
-│   ├── aft-site-registry.md
-│   ├── production-phases.md
-│   ├── browser-vscode-run.md
-│   ├── source-control-setup.md
-│   └── node-enrollment-standard.md
-├── registry-examples/
-│   ├── nodes.yml
-│   ├── templates.yml
-│   ├── builds.yml
-│   └── deployments.yml
-├── scripts/
-├── templates/
-├── aift.schema.yml
-├── aift.node.schema.yml
-└── README.md
-```
-
----
-
-## Safety rule
-
-AFT must not become a system that runs arbitrary commands from untrusted users on community devices.
-
-At scale, nodes should receive signed, approved jobs only. Public workloads must be sandboxed, limited, logged, and tied to a disclosure record.
-
----
-
-## Success definition
-
-AFT succeeds when a user can:
-
-```text
-reserve a name
-build a website
-connect DNS
-deploy to the decentralized VPS cloud
-see where it runs
-roll back safely
-mirror it for resilience
-manage ownership and compliance
-```
-
-and the system can do all of that without hiding infrastructure risk or crashing during handoff.
+This is how AIFT becomes a real node-operated cloud instead of a demo UI.
