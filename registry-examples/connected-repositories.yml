@@ -1,0 +1,41 @@
+connected_repositories:
+  - id: capital-city-provisions
+    repository: AIFreedomTrustFederation/capital-city-provisions
+    url: https://github.com/AIFreedomTrustFederation/capital-city-provisions
+    default_branch: main
+    source_of_truth: github
+    first_build_target: true
+    adaptation_mode: rebrand_and_extract
+    public_brand_copy_policy: reword_for_aift_vps
+    use_live_data_only: true
+    discard_original_business_specifics: true
+    reusable_patterns:
+      - landing_page_gateway
+      - multi_step_intake
+      - route_or_region_check
+      - lead_routing
+      - role_based_assistant
+      - operations_lifecycle
+      - owner_dashboard
+      - driver_or_worker_workspace
+      - open_source_license_audit
+      - mobile_cta_discipline
+    excluded_original_context:
+      - meat_sales_language
+      - freezer_box_claims
+      - cheesecake_offer
+      - giveaway_specifics
+      - delivery_promises
+      - customer_order_records
+      - private_customer_data
+    aift_vps_target_names:
+      landing_page_gateway: decentralized_app_gateway
+      multi_step_intake: project_intake_flow
+      route_or_region_check: node_region_policy_check
+      lead_routing: request_routing_engine
+      role_based_assistant: webai_role_workspace
+      operations_lifecycle: workload_lifecycle_records
+      owner_dashboard: operator_dashboard
+      driver_or_worker_workspace: provider_node_workspace
+      open_source_license_audit: open_source_compliance_gate
+      mobile_cta_discipline: mobile_action_policy
