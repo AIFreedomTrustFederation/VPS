@@ -1,0 +1,14 @@
+templates:
+  static-site:
+    name: Static Website
+    framework: static
+    path: templates/static-site
+    trust_class_default: public-static
+    description: Simple public HTML/CSS website.
+
+  vite-react:
+    name: Vite React App
+    framework: vite
+    path: templates/vite-react
+    trust_class_default: public-dynamic
+    description: Mobile-first React frontend app.
