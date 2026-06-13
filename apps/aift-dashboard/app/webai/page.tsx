@@ -1,4 +1,5 @@
 import { LocalActionsClient } from './LocalActionsClient';
+import { TerminalLogsClient } from './TerminalLogsClient';
 import { WebAIChatClient } from './WebAIChatClient';
 
 export default function WebAIPage() {
@@ -11,6 +12,7 @@ export default function WebAIPage() {
       </section>
 
       <LocalActionsClient />
+      <TerminalLogsClient />
       <WebAIChatClient />
     </main>
   );
