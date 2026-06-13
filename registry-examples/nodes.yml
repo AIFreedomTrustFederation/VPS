@@ -1,0 +1,38 @@
+nodes:
+  sacramento-node-001:
+    operator: AI Freedom Trust Federation
+    operator_class: managed
+    region: us-west
+    status: online
+    trust_level: verified
+    cpu_cores: 4
+    memory_gb: 8
+    storage_gb: 100
+    supports:
+      - static
+      - vite
+      - nextjs
+      - node
+      - docker
+    disclosure:
+      public_node_identity: true
+      public_operator_class: true
+      public_region: true
+
+  community-node-demo-001:
+    operator: Independent AIFT Node Operator
+    operator_class: verified-community
+    region: us-west
+    status: pending
+    trust_level: community
+    cpu_cores: 2
+    memory_gb: 4
+    storage_gb: 80
+    supports:
+      - static
+      - vite
+      - docker
+    disclosure:
+      public_node_identity: true
+      public_operator_class: true
+      public_region: true
