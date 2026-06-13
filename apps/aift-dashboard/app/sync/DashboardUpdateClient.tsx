@@ -9,6 +9,7 @@ type Output = {
 };
 
 const handoffUrl = 'http://127.0.0.1:3999';
+const handoffExportUrl = 'http://127.0.0.1:3999/export';
 
 async function runAction(action: string) {
   const response = await fetch('/api/local-actions', {
@@ -57,6 +58,7 @@ export function DashboardUpdateClient() {
       <div className="toolbar">
         <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={syncHandshake}>{busy === 'handshake' ? 'Starting handshake...' : 'Sync handshake'}</button>
         <a className="btn secondary" href={handoffUrl}>Open handoff page</a>
+        <a className="btn secondary" href={handoffExportUrl}>Export sync handoff log</a>
         <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={updateFiles}>{busy === 'update' ? 'Updating...' : 'Update dashboard files'}</button>
         <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={restartDashboard}>{busy === 'restart' ? 'Restarting...' : 'Restart dashboard'}</button>
         <a className="btn secondary" href="/logs">Open logs</a>
