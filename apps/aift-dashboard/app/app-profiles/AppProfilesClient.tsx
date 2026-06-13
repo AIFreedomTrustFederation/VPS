@@ -21,6 +21,7 @@ type ProfileResult = {
     notes: string;
     workspace_path?: string;
     log_path?: string;
+    preview_url?: string;
   };
 };
 
@@ -31,15 +32,19 @@ type TerminalState = {
 };
 
 function isWorkspaceReady(workload: ProfileResult['workload']) {
-  return Boolean(workload.workspace_path) && ['workspace-ready', 'dependencies-installed', 'build-complete'].includes(workload.status);
+  return Boolean(workload.workspace_path) && ['workspace-ready', 'dependencies-installed', 'build-complete', 'preview-running'].includes(workload.status);
 }
 
 function isInstallReady(workload: ProfileResult['workload']) {
-  return workload.status === 'dependencies-installed' || workload.status === 'build-complete';
+  return workload.status === 'dependencies-installed' || workload.status === 'build-complete' || workload.status === 'preview-running';
 }
 
 function isBuildReady(workload: ProfileResult['workload']) {
-  return workload.status === 'build-complete';
+  return workload.status === 'build-complete' || workload.status === 'preview-running';
+}
+
+function isLocalReady(workload: ProfileResult['workload']) {
+  return workload.status === 'preview-running' && Boolean(workload.preview_url);
 }
 
 export function AppProfilesClient() {
@@ -163,14 +168,38 @@ export function AppProfilesClient() {
 
     if (!data.ok) {
       setMessage(data.error || 'Build failed. Check logs.');
-      setTerminal({ title: 'Build failed', plain: 'The real build command did not finish successfully. Runtime preview stays locked.', output: data.terminal || JSON.stringify(data, null, 2) });
+      setTerminal({ title: 'Build failed', plain: 'The real build command did not finish successfully. Local URL stays locked.', output: data.terminal || JSON.stringify(data, null, 2) });
       setRunning(false);
       return;
     }
 
     setResults((current) => current.map((item) => item.profile.id === profile.id ? { ...item, workload: data.workload } : item));
     setMessage(`Build complete for ${profile.repo}.`);
-    setTerminal({ title: 'Build complete', plain: 'The app built successfully. The next real step is starting a runtime process and assigning a real URL.', output: data.terminal || JSON.stringify(data.workload, null, 2) });
+    setTerminal({ title: 'Build complete', plain: 'The app built successfully. The next real step is starting a local URL.', output: data.terminal || JSON.stringify(data.workload, null, 2) });
+    setRunning(false);
+  }
+
+  async function startLocalUrl(profile: ProfileResult['profile']) {
+    setRunning(true);
+    setMessage('Starting local URL...');
+    setTerminal({ title: 'Start local URL', plain: 'The node is starting the app in the prepared workspace and assigning a real local URL.', output: profile.dev_command || 'Starting local process...' });
+    const response = await fetch('/api/workspaces/start-preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profileId: profile.id }),
+    });
+    const data = await response.json();
+
+    if (!data.ok) {
+      setMessage(data.error || 'Local URL failed. Check logs.');
+      setTerminal({ title: 'Local URL failed', plain: 'The local process did not start, so no URL was assigned.', output: data.terminal || JSON.stringify(data, null, 2) });
+      setRunning(false);
+      return;
+    }
+
+    setResults((current) => current.map((item) => item.profile.id === profile.id ? { ...item, workload: data.workload } : item));
+    setMessage(`Local URL running at ${data.workload.preview_url}.`);
+    setTerminal({ title: 'Local URL running', plain: 'The local process is running and the URL is ready to open.', output: data.terminal || JSON.stringify(data.workload, null, 2) });
     setRunning(false);
   }
 
@@ -213,6 +242,7 @@ export function AppProfilesClient() {
           const workspaceDone = isWorkspaceReady(item.workload);
           const installDone = isInstallReady(item.workload);
           const buildDone = isBuildReady(item.workload);
+          const localDone = isLocalReady(item.workload);
           return (
           <article className="card app-card" key={item.profile.id}>
             <div>
@@ -227,7 +257,7 @@ export function AppProfilesClient() {
                 <div className={`pipeline-step ${workspaceDone ? 'complete' : profileDone ? '' : 'locked'}`}><strong>2. Workspace</strong><p className="muted">{workspaceDone ? 'Complete. Real repo workspace is ready.' : 'Locked until profile is ready.'}</p></div>
                 <div className={`pipeline-step ${installDone ? 'complete' : workspaceDone ? '' : 'locked'}`}><strong>3. Dependencies</strong><p className="muted">{installDone ? 'Complete. Dependencies installed.' : 'Locked until workspace is ready.'}</p></div>
                 <div className={`pipeline-step ${buildDone ? 'complete' : installDone ? '' : 'locked'}`}><strong>4. Build</strong><p className="muted">{buildDone ? 'Complete. Real build succeeded.' : 'Locked until dependency install succeeds.'}</p></div>
-                <div className="pipeline-step locked"><strong>5. Runtime URL</strong><p className="muted">Locked until real build and runtime process succeed.</p></div>
+                <div className={`pipeline-step ${localDone ? 'complete' : buildDone ? '' : 'locked'}`}><strong>5. Local URL</strong><p className="muted">{localDone ? 'Complete. Real local URL is running.' : 'Locked until real build succeeds.'}</p></div>
               </div>
               <p className="footer-note">{item.profile.notes?.join(' ')}</p>
               <div className="stack-list">
@@ -236,14 +266,16 @@ export function AppProfilesClient() {
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Dev:</strong><span>{item.profile.dev_command || 'Not detected'}</span></div>
                 <div className="row-card" style={{ gap: '.75rem' }}><strong>Verify:</strong><span>{item.profile.verify_command || 'Not detected'}</span></div>
                 {item.workload.workspace_path && <div className="row-card" style={{ gap: '.75rem' }}><strong>Workspace:</strong><span>{item.workload.workspace_path}</span></div>}
+                {item.workload.preview_url && <div className="row-card" style={{ gap: '.75rem' }}><strong>Local URL:</strong><a href={item.workload.preview_url}>{item.workload.preview_url}</a></div>}
               </div>
               <div className="toolbar" style={{ marginTop: '1rem' }}>
                 <button className={`btn ${workspaceDone ? 'complete' : profileDone ? 'ready-next' : ''}`} type="button" disabled={running || !profileDone} onClick={() => prepareWorkspace(item.profile)}>{workspaceDone ? 'Workspace ready' : 'Prepare workspace'}</button>
                 {workspaceDone && <button className={`btn ${installDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || installDone} onClick={() => installDependencies(item.profile)}>{installDone ? 'Dependencies installed' : 'Install dependencies'}</button>}
                 {installDone && <button className={`btn ${buildDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || buildDone} onClick={() => runBuild(item.profile)}>{buildDone ? 'Build complete' : 'Run build'}</button>}
+                {buildDone && <button className={`btn ${localDone ? 'complete' : 'ready-next'}`} type="button" disabled={running || localDone} onClick={() => startLocalUrl(item.profile)}>{localDone ? 'Local URL running' : 'Start local URL'}</button>}
+                {localDone && item.workload.preview_url && <a className="btn complete" href={item.workload.preview_url}>Open app</a>}
                 {item.workload.log_path && <a className="btn secondary" href="/logs">View logs</a>}
               </div>
-              <p className="muted">Launch URL stays locked until real install, build, and runtime steps succeed.</p>
             </div>
             <span className={`status ${item.profile.profile_ready ? 'successful' : 'pending'}`}>{item.profile.profile_ready ? 'Ready' : 'Review'}</span>
           </article>
