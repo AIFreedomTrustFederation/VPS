@@ -9,6 +9,7 @@ const host = process.env.AIFT_HANDOFF_HOST || '127.0.0.1';
 const appPort = process.env.APP_PORT || '3001';
 const home = process.env.AIFT_HOME || path.join(os.homedir(), '.aift-webai');
 const readyFile = path.join(home, 'runtime', 'dashboard-ready.json');
+const runningFile = path.join(home, 'runtime', 'dashboard-running.json');
 const logDir = path.join(home, 'logs');
 
 function readState() {
@@ -16,6 +17,14 @@ function readState() {
     return JSON.parse(fs.readFileSync(readyFile, 'utf8'));
   } catch {
     return { state: 'waiting', message: 'Waiting for dashboard restart status.', updated_at: '' };
+  }
+}
+
+function readFileText(file, fallback) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return fallback;
   }
 }
 
@@ -41,12 +50,39 @@ function escapeHtml(value) {
 function statusPayload() {
   return {
     state: readState(),
+    running: readFileText(runningFile, 'No dashboard-running.json file yet.'),
     logs: {
       sync_handshake: readLog('sync-handshake.log'),
       dashboard_restart: readLog('dashboard-restart.log'),
       sync_handoff: readLog('sync-handoff.log'),
     }
   };
+}
+
+function exportBundle() {
+  const now = new Date().toISOString();
+  const payload = statusPayload();
+  return [
+    'AIFT LOG EXPORT',
+    `Exported at: ${now}`,
+    `AIFT home: ${home}`,
+    '',
+    '=== dashboard-ready.json ===',
+    JSON.stringify(payload.state, null, 2),
+    '',
+    '=== dashboard-running.json ===',
+    payload.running,
+    '',
+    '=== sync-handshake.log ===',
+    payload.logs.sync_handshake,
+    '',
+    '=== dashboard-restart.log ===',
+    payload.logs.dashboard_restart,
+    '',
+    '=== sync-handoff.log ===',
+    payload.logs.sync_handoff,
+    ''
+  ].join('\n');
 }
 
 function terminalBlock(title, text) {
@@ -95,10 +131,12 @@ small { color: rgba(255,247,234,.62); }
       </div>
       <div class="actions">
         ${ready ? `<a class="btn ready" href="http://127.0.0.1:${appPort}/sync">Return to AIFT Cloud</a>` : `<a class="btn" href="/status">Refresh status</a>`}
+        <a class="btn" href="/export">Export logs</a>
         <a class="btn" href="/status.json">JSON</a>
         <a class="btn" href="/">Handoff</a>
       </div>
     </section>
+    ${terminalBlock('dashboard-running.json', payload.running)}
     ${terminalBlock('sync-handshake.log', payload.logs.sync_handshake)}
     ${terminalBlock('dashboard-restart.log', payload.logs.dashboard_restart)}
     ${terminalBlock('sync-handoff.log', payload.logs.sync_handoff)}
@@ -146,6 +184,7 @@ small { color: rgba(255,247,234,.62); }
     <div class="actions">
       ${ready ? `<a class="btn ready" href="${appUrl}">Return to AIFT Cloud</a>` : `<a class="btn" href="/">Check again</a>`}
       <a class="btn" href="/status">Raw status</a>
+      <a class="btn" href="/export">Export logs</a>
     </div>
   </main>
 </body>
@@ -153,6 +192,17 @@ small { color: rgba(255,247,234,.62); }
 }
 
 const server = http.createServer((req, res) => {
+  if (req.url === '/export') {
+    const text = exportBundle();
+    const fileName = `aift-log-export-${new Date().toISOString().replaceAll(':', '-')}.txt`;
+    res.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+      'content-disposition': `attachment; filename="${fileName}"`,
+      'cache-control': 'no-store'
+    });
+    res.end(text);
+    return;
+  }
   if (req.url === '/status.json') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify(statusPayload(), null, 2));
