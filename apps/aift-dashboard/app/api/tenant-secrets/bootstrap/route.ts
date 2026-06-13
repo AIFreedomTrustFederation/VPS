@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireBearerToken } from '@/lib/auth';
+import { requireApiAuth } from '@/lib/auth';
 import { ensureTenantSecrets } from '@/lib/tenant-secrets';
 
 export async function POST(request: NextRequest) {
-  const auth = requireBearerToken(request.headers);
-  if (auth) return auth;
+  const auth = requireApiAuth(request);
+  if (!auth.ok) {
+    return NextResponse.json(auth, { status: 401 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const tenantName = typeof body.tenant_name === 'string' && body.tenant_name.trim()
