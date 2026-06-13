@@ -6,6 +6,7 @@ import { writeLocalActionLog } from '@/lib/local-action-log';
 
 const actions = [
   { id: 'refresh-node', label: 'Refresh node from GitHub' },
+  { id: 'restart-dashboard', label: 'Restart dashboard' },
   { id: 'write-heartbeat', label: 'Write heartbeat' },
   { id: 'list-services', label: 'List local services' },
   { id: 'check-engine-report', label: 'Check engine report' },
@@ -26,11 +27,15 @@ function findRepoRoot() {
 function runAction(action: ActionId) {
   const repoRoot = findRepoRoot();
   const appDir = path.join(repoRoot, 'apps', 'aift-dashboard');
+  const home = process.env.HOME || '.';
+  const restartLog = `${home}/.aift-webai/logs/dashboard-restart.log`;
 
   const command = (() => {
     switch (action) {
       case 'refresh-node':
         return { cmd: 'git', args: ['pull', '--ff-only'], cwd: repoRoot };
+      case 'restart-dashboard':
+        return { cmd: 'bash', args: ['-lc', `mkdir -p ${home}/.aift-webai/logs; cd ${repoRoot}; (sleep 1; pkill -f "next dev" || true; rm -rf apps/aift-dashboard/.next; bash scripts/aift-start-dashboard.sh) > ${restartLog} 2>&1 & echo "Dashboard restart scheduled. Reload the page in a few seconds. Log: ${restartLog}"`], cwd: repoRoot };
       case 'write-heartbeat':
         return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-heartbeat-with-port.sh')], cwd: repoRoot };
       case 'list-services':
