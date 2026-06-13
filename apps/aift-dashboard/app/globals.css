@@ -23,7 +23,12 @@ body {
   background: radial-gradient(circle at top left, rgba(226,185,82,.22), transparent 30rem), linear-gradient(145deg,#07060a,#15101e 55%,#08070c);
 }
 a { color: inherit; text-decoration: none; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
+.topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 1rem; padding: .8rem clamp(1rem,4vw,3rem); border-bottom: 1px solid var(--muted-line); background: rgba(7,6,10,.82); backdrop-filter: blur(16px); }
+.brand { white-space: nowrap; color: var(--gold); font-weight: 950; letter-spacing: -.03em; }
+.nav-scroll { display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .1rem; }
+.nav-scroll a { white-space: nowrap; padding: .55rem .75rem; border: 1px solid var(--muted-line); border-radius: 999px; color: var(--muted); font-size: .85rem; font-weight: 800; }
+.nav-scroll a:hover { color: var(--text); border-color: var(--line); }
 .page { width: min(100%, 1180px); margin: 0 auto; padding: clamp(1rem, 4vw, 3rem); }
 .eyebrow { margin: 0; color: var(--gold); font-size: .76rem; font-weight: 900; letter-spacing: .2em; text-transform: uppercase; }
 h1 { margin: .25rem 0 .75rem; font-size: clamp(2.5rem, 11vw, 6.5rem); line-height: .88; letter-spacing: -.08em; }
@@ -45,7 +50,11 @@ h1 { margin: .25rem 0 .75rem; font-size: clamp(2.5rem, 11vw, 6.5rem); line-heigh
 .status.running { color: var(--green); }
 .status.stopped { color: var(--red); }
 .status.unknown { color: var(--blue); }
+.status.healthy { color: var(--green); }
+.status.pending { color: var(--blue); }
+.status.failed { color: var(--red); }
+.status.successful { color: var(--green); }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: flex-end; }
 .footer-note { margin-top: 1.5rem; color: var(--muted); font-size: .92rem; line-height: 1.6; }
-@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); } .app-card { grid-template-columns: 1fr; } .actions { justify-content: flex-start; } }
+@media (max-width: 760px) { .topbar { align-items: flex-start; flex-direction: column; gap: .65rem; } .nav-scroll { width: 100%; } .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); } .app-card { grid-template-columns: 1fr; } .actions { justify-content: flex-start; } }
 @media (max-width: 440px) { .metrics { grid-template-columns: 1fr; } .btn { width: 100%; } }
