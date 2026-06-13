@@ -1,0 +1,18 @@
+builds:
+  build_001:
+    app: aift-launch-test
+    status: successful
+    node: sacramento-node-001
+    started_at: 2026-06-12T20:00:00Z
+    finished_at: 2026-06-12T20:02:00Z
+    commit: example-commit-sha
+    framework: vite
+
+  build_002:
+    app: aift-dashboard
+    status: pending
+    node: sacramento-node-001
+    started_at: null
+    finished_at: null
+    commit: pending
+    framework: nextjs
