@@ -31,12 +31,13 @@ export default async function SitesPage() {
               <h3>{site.title}</h3>
               <div className="meta">
                 <span>{site.primaryUrl}</span>
-                <span>{site.activeDeploymentId ? `active deployment ${site.activeDeploymentId.slice(0, 8)}` : 'no active deployment'}</span>
+                <span>{site.activeDeploymentId ? 'active deployment ' + site.activeDeploymentId.slice(0, 8) : 'no active deployment'}</span>
               </div>
               {site.description ? <p className="footer-note">{site.description}</p> : null}
             </div>
             <div className="actions">
-              <span className={`status ${site.status}`}>{site.status}</span>
+              <span className={'status ' + site.status}>{site.status}</span>
+              <a className="btn" href={'/sites/' + site.id}>Manage</a>
               <a className="btn secondary" href={site.gatewayPath}>Open</a>
             </div>
           </article>
