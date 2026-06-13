@@ -6,6 +6,8 @@ APP_DIR="$NODE_DIR/apps/aift-dashboard"
 HOST="${APP_HOST:-127.0.0.1}"
 PREFERRED_PORT="${APP_PORT:-3001}"
 SERVICE="${AIFT_SERVICE:-dashboard}"
+AIFT_HOME_DIR="${AIFT_HOME:-$HOME/.aift-webai}"
+RUNTIME_DIR="$AIFT_HOME_DIR/runtime"
 
 printf '\n[AIFT VPS] Start dashboard with automatic port assignment\n'
 printf '[AIFT VPS] Node dir: %s\n' "$NODE_DIR"
@@ -36,6 +38,12 @@ if [ ! -d "$APP_DIR" ]; then
   exit 1
 fi
 
+RUNNING_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+RUNNING_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+mkdir -p "$RUNTIME_DIR"
+printf '{"running_commit":"%s","running_branch":"%s","started_at":"%s","host":"%s","port":"%s"}\n' "$RUNNING_COMMIT" "$RUNNING_BRANCH" "$STARTED_AT" "$HOST" "$ASSIGNED_PORT" > "$RUNTIME_DIR/dashboard-running.json"
+
 cd "$APP_DIR"
 
 if [ ! -d node_modules ]; then
@@ -44,6 +52,7 @@ if [ ! -d node_modules ]; then
 fi
 
 printf '\n[AIFT VPS] Dashboard assigned port: %s\n' "$ASSIGNED_PORT"
-printf '[AIFT VPS] Local URL: http://%s:%s\n\n' "$HOST" "$ASSIGNED_PORT"
+printf '[AIFT VPS] Local URL: http://%s:%s\n' "$HOST" "$ASSIGNED_PORT"
+printf '[AIFT VPS] Running commit: %s\n\n' "$RUNNING_COMMIT"
 
 exec npx next dev --webpack --hostname "$HOST" --port "$ASSIGNED_PORT"
