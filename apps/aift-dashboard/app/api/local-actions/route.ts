@@ -28,14 +28,16 @@ function runAction(action: ActionId) {
   const repoRoot = findRepoRoot();
   const appDir = path.join(repoRoot, 'apps', 'aift-dashboard');
   const home = process.env.HOME || '.';
-  const restartLog = `${home}/.aift-webai/logs/dashboard-restart.log`;
+  const baseHome = process.env.AIFT_HOME || `${home}/.aift-webai`;
+  const restartLog = `${baseHome}/logs/dashboard-restart.log`;
+  const readyFile = `${baseHome}/runtime/dashboard-ready.json`;
 
   const command = (() => {
     switch (action) {
       case 'refresh-node':
         return { cmd: 'git', args: ['pull', '--ff-only'], cwd: repoRoot };
       case 'restart-dashboard':
-        return { cmd: 'bash', args: ['-lc', `mkdir -p ${home}/.aift-webai/logs; cd ${repoRoot}; (sleep 1; pkill -f "next dev" || true; rm -rf apps/aift-dashboard/.next; bash scripts/aift-start-dashboard.sh) > ${restartLog} 2>&1 & echo "Dashboard restart scheduled. Reload the page in a few seconds. Log: ${restartLog}"`], cwd: repoRoot };
+        return { cmd: 'bash', args: ['-lc', `mkdir -p ${baseHome}/logs ${baseHome}/runtime; printf '{"state":"starting","message":"Dashboard restart is running.","updated_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile}; cd ${repoRoot}; (sleep 1; pkill -f "next dev" || true; rm -rf apps/aift-dashboard/.next; bash scripts/aift-start-dashboard.sh; printf '{"state":"ready","message":"Dashboard is ready. Reload the app.","updated_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile}) > ${restartLog} 2>&1 & echo "Dashboard restart scheduled. Wait for ready status before reload. Log: ${restartLog}"`], cwd: repoRoot };
       case 'write-heartbeat':
         return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-heartbeat-with-port.sh')], cwd: repoRoot };
       case 'list-services':
@@ -51,7 +53,7 @@ function runAction(action: ActionId) {
     cwd: command.cwd,
     encoding: 'utf8',
     timeout: 30000,
-    env: { ...process.env, AIFT_HOME: process.env.AIFT_HOME || `${process.env.HOME}/.aift-webai` },
+    env: { ...process.env, AIFT_HOME: baseHome },
   });
 
   const terminal = [result.stdout || '', result.stderr || ''].filter(Boolean).join('\n') || 'No output returned.';
