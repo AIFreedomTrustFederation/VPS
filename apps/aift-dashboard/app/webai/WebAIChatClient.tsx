@@ -31,11 +31,20 @@ type WebAIContext = {
   recommended_next_step: string;
 };
 
+type WebAIModel = {
+  id: string;
+  label: string;
+  runtime: string;
+  status: string;
+};
+
 export function WebAIChatClient() {
   const [text, setText] = useState('');
   const [active, setActive] = useState<Conversation | null>(null);
   const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [context, setContext] = useState<WebAIContext | null>(null);
+  const [models, setModels] = useState<WebAIModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState('aift-context-v0');
   const [sending, setSending] = useState(false);
 
   async function loadHistory() {
@@ -51,9 +60,18 @@ export function WebAIChatClient() {
     setContext(await response.json());
   }
 
+  async function loadModels() {
+    const response = await fetch('/api/webai/models', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    setModels(data.models ?? []);
+    setSelectedModel(data.default_model?.id ?? 'aift-context-v0');
+  }
+
   useEffect(() => {
     loadHistory();
     loadContext();
+    loadModels();
   }, []);
 
   async function submit(event: FormEvent) {
@@ -67,7 +85,7 @@ export function WebAIChatClient() {
     const response = await fetch('/api/webai/chat', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message, conversation_id: active?.id }),
+      body: JSON.stringify({ message, conversation_id: active?.id, model_id: selectedModel }),
     });
 
     if (response.ok) {
@@ -80,6 +98,8 @@ export function WebAIChatClient() {
     setSending(false);
   }
 
+  const currentModel = models.find((model) => model.id === selectedModel);
+
   return (
     <div className="grid two">
       <aside className="panel-card">
@@ -87,6 +107,17 @@ export function WebAIChatClient() {
           <strong>+</strong>
           <button type="button" onClick={() => setActive(null)}>New chat</button>
         </div>
+
+        <h2>Open model</h2>
+        <label htmlFor="webai-model">Choose WebAI model</label>
+        <select id="webai-model" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
+          {models.length === 0 ? (
+            <option value="aift-context-v0">AIFT Context v0</option>
+          ) : models.map((model) => (
+            <option key={model.id} value={model.id}>{model.label} — {model.status}</option>
+          ))}
+        </select>
+        <p className="muted">{currentModel ? `${currentModel.runtime} / ${currentModel.status}` : 'Model registry loading.'}</p>
 
         <h2>Chat history</h2>
         <div className="stack-list">
