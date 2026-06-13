@@ -20,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <a href="/deployments">Deployments</a>
             <a href="/nodes">Nodes</a>
             <a href="/health">Health</a>
+            <a href="/provider/secrets">Provider</a>
             <a href="/settings">Settings</a>
           </nav>
         </header>
