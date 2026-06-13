@@ -1,0 +1,63 @@
+aift_vps_node_app:
+  product_name: AIFT VPS Node App
+  purpose: Cross-platform provider node app for AIFT VPS.
+  runtime_strategy: bundled_linux_style_runtime
+  proof_runtime: termux
+
+  first_launch_flow:
+    - welcome
+    - node_identity
+    - runtime_setup
+    - provider_mode
+    - start_node
+    - heartbeat
+    - node_online
+    - dashboard
+
+  screens:
+    - welcome
+    - node_identity
+    - runtime_setup
+    - provider_mode
+    - start_node
+    - node_online
+    - discovery
+    - logs
+    - settings
+
+  runtime_needs:
+    - app_storage
+    - nodejs
+    - npm
+    - http_download
+    - repo_zip_download
+    - local_process_control
+    - local_port
+    - logs
+    - environment
+    - update_flow
+
+  node_actions:
+    - installRuntime
+    - updateRuntime
+    - createNodeIdentity
+    - readNodeIdentity
+    - startDashboard
+    - stopDashboard
+    - getDashboardStatus
+    - writeHeartbeat
+    - exportNodeCard
+    - importNodeCard
+    - listNodeCards
+    - readLogs
+    - reportCapabilities
+
+  node_classes:
+    - phone-experimental
+    - phone-plugged-in
+    - tablet-node
+    - laptop-worker
+    - desktop-worker
+    - mini-pc-node
+    - server-node
+    - verified-provider-node
