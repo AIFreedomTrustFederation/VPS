@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeLocalActionLog } from '@/lib/local-action-log';
 
 const actions = [
+  { id: 'sync-handshake', label: 'Sync handshake' },
   { id: 'refresh-node', label: 'Refresh node from GitHub' },
   { id: 'restart-dashboard', label: 'Restart dashboard' },
   { id: 'write-heartbeat', label: 'Write heartbeat' },
@@ -31,14 +32,17 @@ function runAction(action: ActionId) {
   const baseHome = process.env.AIFT_HOME || `${home}/.aift-webai`;
   const restartLog = `${baseHome}/logs/dashboard-restart.log`;
   const handoffLog = `${baseHome}/logs/sync-handoff.log`;
+  const handshakeLog = `${baseHome}/logs/sync-handshake.log`;
   const readyFile = `${baseHome}/runtime/dashboard-ready.json`;
 
   const command = (() => {
     switch (action) {
+      case 'sync-handshake':
+        return { cmd: 'bash', args: ['-lc', `mkdir -p ${baseHome}/logs ${baseHome}/runtime; printf '{"state":"syncing","message":"Sync handshake started. Keep the handoff page open.","updated_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile}; cd ${repoRoot}; (node scripts/aift-sync-handoff-server.mjs > ${handoffLog} 2>&1 &) ; (git pull --ff-only && printf '{"state":"starting","message":"Dashboard files synced. Restarting dashboard.","updated_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile} && sleep 1 && pkill -f "next dev" || true; rm -rf apps/aift-dashboard/.next; bash scripts/aift-start-dashboard.sh) > ${handshakeLog} 2>&1 & echo "Sync handshake scheduled. Open handoff URL: http://127.0.0.1:3999"`], cwd: repoRoot };
       case 'refresh-node':
         return { cmd: 'git', args: ['pull', '--ff-only'], cwd: repoRoot };
       case 'restart-dashboard':
-        return { cmd: 'bash', args: ['-lc', `mkdir -p ${baseHome}/logs ${baseHome}/runtime; printf '{"state":"starting","message":"Dashboard restart is running. Keep this handoff page open.","updated_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile}; cd ${repoRoot}; (node scripts/aift-sync-handoff-server.mjs > ${handoffLog} 2>&1 &) ; (sleep 1; pkill -f "next dev" || true; rm -rf apps/aift-dashboard/.next; bash scripts/aift-start-dashboard.sh; printf '{"state":"ready","message":"Dashboard is ready. Return to AIFT Cloud.","updated_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile}) > ${restartLog} 2>&1 & echo "Dashboard restart scheduled. Open handoff URL: http://127.0.0.1:3999"`], cwd: repoRoot };
+        return { cmd: 'bash', args: ['-lc', `mkdir -p ${baseHome}/logs ${baseHome}/runtime; printf '{"state":"starting","message":"Dashboard restart is running. Keep this handoff page open.","updated_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile}; cd ${repoRoot}; (node scripts/aift-sync-handoff-server.mjs > ${handoffLog} 2>&1 &) ; (sleep 1; pkill -f "next dev" || true; rm -rf apps/aift-dashboard/.next; bash scripts/aift-start-dashboard.sh) > ${restartLog} 2>&1 & echo "Dashboard restart scheduled. Open handoff URL: http://127.0.0.1:3999"`], cwd: repoRoot };
       case 'write-heartbeat':
         return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-heartbeat-with-port.sh')], cwd: repoRoot };
       case 'list-services':
