@@ -1,0 +1,25 @@
+services:
+  aift-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aift-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      AIFT_REGISTRY_PATH: /opt/aift/registry/apps.yml
+      AIFT_NODES_PATH: /opt/aift/registry/nodes.yml
+      AIFT_TEMPLATES_PATH: /opt/aift/registry/templates.yml
+      AIFT_BUILDS_PATH: /opt/aift/registry/builds.yml
+      AIFT_DEPLOYMENTS_PATH: /opt/aift/registry/deployments.yml
+      AIFT_LOG_PATH: /opt/aift/logs
+      AIFT_DASHBOARD_TOKEN: ${AIFT_DASHBOARD_TOKEN:-change-this-dashboard-token}
+      AIFT_NODE_TOKEN: ${AIFT_NODE_TOKEN:-change-this-node-token}
+      COOLIFY_URL: ${COOLIFY_URL:-}
+      COOLIFY_API_TOKEN: ${COOLIFY_API_TOKEN:-}
+    volumes:
+      - /opt/aift/registry:/opt/aift/registry
+      - /opt/aift/logs:/opt/aift/logs
