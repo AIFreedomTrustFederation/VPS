@@ -53,6 +53,7 @@ function statusPayload() {
     running: readFileText(runningFile, 'No dashboard-running.json file yet.'),
     logs: {
       sync_handshake: readLog('sync-handshake.log'),
+      sync_history: readLog('sync-history.log', 60000),
       dashboard_restart: readLog('dashboard-restart.log'),
       sync_handoff: readLog('sync-handoff.log'),
     }
@@ -75,6 +76,9 @@ function exportBundle() {
     '',
     '=== sync-handshake.log ===',
     payload.logs.sync_handshake,
+    '',
+    '=== sync-history.log ===',
+    payload.logs.sync_history,
     '',
     '=== dashboard-restart.log ===',
     payload.logs.dashboard_restart,
@@ -138,6 +142,7 @@ small { color: rgba(255,247,234,.62); }
     </section>
     ${terminalBlock('dashboard-running.json', payload.running)}
     ${terminalBlock('sync-handshake.log', payload.logs.sync_handshake)}
+    ${terminalBlock('sync-history.log', payload.logs.sync_history)}
     ${terminalBlock('dashboard-restart.log', payload.logs.dashboard_restart)}
     ${terminalBlock('sync-handoff.log', payload.logs.sync_handoff)}
   </main>
