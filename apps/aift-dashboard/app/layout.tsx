@@ -1,17 +1,36 @@
 import './globals.css';
 import './webai/webai-mobile.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import { PwaInstallClient } from './PwaInstallClient';
 
 export const metadata: Metadata = {
   title: 'AIFT Cloud App Foundry',
-  description: 'Mobile-first decentralized cloud app foundry dashboard.'
+  description: 'Mobile-first decentralized cloud app foundry dashboard.',
+  manifest: '/manifest.webmanifest',
+  applicationName: 'AIFT Cloud',
+  appleWebApp: {
+    capable: true,
+    title: 'AIFT Cloud',
+    statusBarStyle: 'black-translucent',
+  },
+  icons: {
+    icon: '/icons/aift-icon-192.svg',
+    apple: '/icons/aift-icon-192.svg',
+  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#0f172a',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
+        <PwaInstallClient />
         <header className="topbar">
           <a className="brand" href="/">AIFT Cloud</a>
           <nav className="nav-scroll">
