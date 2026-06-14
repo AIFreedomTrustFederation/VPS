@@ -8,9 +8,24 @@ type Output = {
   ok: boolean | null;
 };
 
+type StepState = 'waiting' | 'running' | 'complete' | 'error';
+
+type FlowStep = {
+  key: string;
+  label: string;
+  state: StepState;
+};
+
 const handoffUrl = 'http://127.0.0.1:3999';
+const handoffStatusUrl = 'http://127.0.0.1:3999/status';
 const handoffExportUrl = 'http://127.0.0.1:3999/export';
 const checkUrls = ['/api/dashboard-ready', '/api/repo-status', '/api/local-actions', '/api/services', '/api/engine/report', '/api/engine/collections'];
+const initialSteps: FlowStep[] = [
+  { key: 'ports', label: 'Verify phone ports and handoff server', state: 'waiting' },
+  { key: 'sync', label: 'Sync repo and schedule detached supervisor', state: 'waiting' },
+  { key: 'handoff', label: 'Move safely to handoff while dashboard restarts', state: 'waiting' },
+  { key: 'ready', label: 'Wait for dashboard ready status', state: 'waiting' },
+];
 
 async function runAction(action: string) {
   const response = await fetch('/api/local-actions', {
@@ -33,9 +48,56 @@ async function checkOne(url: string) {
   }
 }
 
+function updateStep(steps: FlowStep[], key: string, state: StepState) {
+  return steps.map((step) => step.key === key ? { ...step, state } : step);
+}
+
+function stateLabel(state: StepState) {
+  if (state === 'complete') return 'GREEN';
+  if (state === 'running') return 'YELLOW';
+  if (state === 'error') return 'RED';
+  return 'WAIT';
+}
+
 export function DashboardUpdateClient() {
   const [busy, setBusy] = useState('');
   const [output, setOutput] = useState<Output | null>(null);
+  const [steps, setSteps] = useState<FlowStep[]>(initialSteps);
+  const [showManual, setShowManual] = useState(false);
+
+  async function safeRestartApp() {
+    setBusy('safe-restart');
+    setSteps(initialSteps);
+    setOutput({ title: 'Safe restart app flow', text: 'Starting ordered recovery flow. Manual buttons are locked until this finishes.', ok: null });
+
+    setSteps((current) => updateStep(current, 'ports', 'running'));
+    const ports = await runAction('ensure-phone-ports');
+    if (!ports.ok) {
+      setSteps((current) => updateStep(current, 'ports', 'error'));
+      setOutput({ title: 'Phone port check failed', text: ports.terminal || JSON.stringify(ports, null, 2), ok: false });
+      setBusy('');
+      return;
+    }
+    setSteps((current) => updateStep(current, 'ports', 'complete'));
+
+    setSteps((current) => updateStep(current, 'sync', 'running'));
+    const sync = await runAction('sync-handshake');
+    if (!sync.ok) {
+      setSteps((current) => updateStep(current, 'sync', 'error'));
+      setOutput({ title: 'Sync handshake failed', text: sync.terminal || JSON.stringify(sync, null, 2), ok: false });
+      setBusy('');
+      return;
+    }
+    setSteps((current) => updateStep(current, 'sync', 'complete'));
+
+    setSteps((current) => updateStep(current, 'handoff', 'complete'));
+    setSteps((current) => updateStep(current, 'ready', 'running'));
+    setOutput({ title: 'Safe restart scheduled', text: `${ports.terminal || ''}\n\n${sync.terminal || ''}\n\nOpening handoff status while the detached supervisor restarts the dashboard.`, ok: true });
+
+    window.setTimeout(() => {
+      window.location.href = handoffStatusUrl;
+    }, 900);
+  }
 
   async function syncHandshake() {
     setBusy('handshake');
@@ -66,9 +128,9 @@ export function DashboardUpdateClient() {
 
   async function restartDashboard() {
     setBusy('restart');
-    setOutput({ title: 'Starting handoff and restarting dashboard', text: `Opening the handoff URL before restart is recommended: ${handoffUrl}`, ok: null });
+    setOutput({ title: 'Starting detached dashboard supervisor', text: `The supervisor will restart the dashboard on the same port. Handoff URL: ${handoffUrl}`, ok: null });
     const data = await runAction('restart-dashboard');
-    setOutput({ title: data.ok ? 'Dashboard restart scheduled' : 'Dashboard restart needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
+    setOutput({ title: data.ok ? 'Dashboard supervisor scheduled' : 'Dashboard restart needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
     setBusy('');
   }
 
@@ -86,18 +148,41 @@ export function DashboardUpdateClient() {
 
   return (
     <section className="panel-card">
-      <h2>Dashboard update</h2>
-      <p className="muted">Use one handshake button to update files, restart the whole dashboard, and move to the handoff page while the main app rebuilds.</p>
+      <h2>Safe app restart</h2>
+      <p className="muted">Use one button for the ordered flow. It checks phone ports, syncs the repo, launches the detached supervisor, then moves to handoff while the dashboard comes back on the same port.</p>
       <div className="toolbar">
-        <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={syncHandshake}>{busy === 'handshake' ? 'Starting handshake...' : 'Sync handshake'}</button>
-        <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={ensurePhonePorts}>{busy === 'ports' ? 'Checking ports...' : 'Ensure phone ports are open'}</button>
+        <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={safeRestartApp}>{busy === 'safe-restart' ? 'Running safe restart...' : 'Restart AIFT Cloud safely'}</button>
+        <a className="btn secondary" href={handoffStatusUrl}>Open handoff status</a>
+        <a className="btn secondary" href={handoffExportUrl}>Export logs</a>
         <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={runWiringCheck}>{busy === 'wiring' ? 'Checking wiring...' : 'Run wiring check'}</button>
-        <a className="btn secondary" href={handoffUrl}>Open handoff page</a>
-        <a className="btn secondary" href={handoffExportUrl}>Export sync handoff log</a>
-        <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={updateFiles}>{busy === 'update' ? 'Updating...' : 'Update dashboard files'}</button>
-        <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={restartDashboard}>{busy === 'restart' ? 'Restarting...' : 'Restart dashboard'}</button>
-        <a className="btn secondary" href="/logs">Open logs</a>
       </div>
+
+      <div className="pipeline-list" style={{ marginTop: '1rem' }}>
+        {steps.map((step) => (
+          <article className={`pipeline-step ${step.state === 'complete' ? 'complete' : step.state === 'running' ? 'ready-next' : step.state === 'error' ? 'locked' : ''}`} key={step.key}>
+            <strong>{stateLabel(step.state)} · {step.label}</strong>
+          </article>
+        ))}
+      </div>
+
+      <div className="toolbar" style={{ marginTop: '1rem' }}>
+        <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={() => setShowManual((value) => !value)}>{showManual ? 'Hide manual fallback' : 'Show manual fallback'}</button>
+      </div>
+
+      {showManual && (
+        <div className="log-panel">
+          <h4>Manual fallback controls</h4>
+          <div className="explainer">Use these only when the safe restart flow needs manual recovery.</div>
+          <div className="toolbar">
+            <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={ensurePhonePorts}>{busy === 'ports' ? 'Checking ports...' : 'Ensure phone ports are open'}</button>
+            <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={syncHandshake}>{busy === 'handshake' ? 'Starting handshake...' : 'Sync handshake only'}</button>
+            <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={updateFiles}>{busy === 'update' ? 'Updating...' : 'Update files only'}</button>
+            <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={restartDashboard}>{busy === 'restart' ? 'Restarting...' : 'Restart supervisor only'}</button>
+            <a className="btn secondary" href="/logs">Open logs</a>
+          </div>
+        </div>
+      )}
+
       {output && (
         <div className="log-panel">
           <h4>{output.title}</h4>
