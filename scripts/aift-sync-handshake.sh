@@ -104,17 +104,13 @@ else
   line "Update result: dashboard files changed."
 fi
 
-write_ready "starting" "Dashboard files synced. Restarting dashboard."
-line "Dashboard restart: scheduling clean start"
-line "Stopping old dashboard process..."
-pkill -f "next dev" >/dev/null 2>&1 || true
-sleep 2
-line "Clearing dashboard build cache..."
-rm -rf apps/aift-dashboard/.next
-line "Starting dashboard..."
+write_ready "starting" "Dashboard files synced. Detached supervisor is restarting dashboard on the same phone port."
+line "Dashboard restart: scheduling detached supervisor"
+line "Supervisor script: scripts/aift-dashboard-supervisor.sh"
 
-bash scripts/aift-start-dashboard.sh >> "$HANDSHAKE_LOG" 2>&1 &
-line "Dashboard start command launched in background."
+AIFT_NODE_DIR="$NODE_DIR" AIFT_HOME="$AIFT_HOME_DIR" APP_PORT="$APP_PORT_VALUE" AIFT_HANDOFF_PORT="$HANDOFF_PORT" nohup bash scripts/aift-dashboard-supervisor.sh >/dev/null 2>&1 &
+
+line "Detached dashboard supervisor launched."
 line "Handoff status URL: http://127.0.0.1:$HANDOFF_PORT/status"
 line "Handoff export URL: http://127.0.0.1:$HANDOFF_PORT/export"
 line "Finished scheduling at: $(now_utc)"
