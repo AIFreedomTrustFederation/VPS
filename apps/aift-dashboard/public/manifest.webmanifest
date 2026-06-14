@@ -1,0 +1,44 @@
+{
+  "name": "AIFT Cloud App Foundry",
+  "short_name": "AIFT Cloud",
+  "description": "Mobile-first decentralized cloud app foundry dashboard for AIFT VPS.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#050810",
+  "theme_color": "#0f172a",
+  "categories": ["productivity", "developer", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/aift-icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/aift-icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Activate dashboard",
+      "short_name": "Activate",
+      "description": "Open the AIFT Cloud sync and activation hub.",
+      "url": "/sync",
+      "icons": [{ "src": "/icons/aift-icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Open logs",
+      "short_name": "Logs",
+      "description": "Open AIFT Cloud logs.",
+      "url": "/logs",
+      "icons": [{ "src": "/icons/aift-icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    }
+  ]
+}
