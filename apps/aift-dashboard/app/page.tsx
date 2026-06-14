@@ -17,6 +17,11 @@ export default async function HomePage() {
         <p className="lead">
           Build websites, reserve names, deploy to the decentralized VPS cloud, track node health, and keep every public route protected by health checks and fallback deployments.
         </p>
+        <nav className="toolbar" style={{ marginTop: '1.25rem' }}>
+          <a className="btn complete" href="/sync">Activate latest dashboard</a>
+          <a className="btn secondary" href="http://127.0.0.1:3999/status">Handoff status</a>
+          <a className="btn secondary" href="http://127.0.0.1:3999/export">Export logs</a>
+        </nav>
       </section>
 
       <section className="grid metrics">
