@@ -37,7 +37,7 @@ function runAction(action: ActionId) {
   const command = (() => {
     switch (action) {
       case 'sync-handshake':
-        return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-sync-handshake.sh')], cwd: repoRoot };
+        return { cmd: 'bash', args: ['-lc', `cd ${repoRoot}; AIFT_HOME=${baseHome} APP_PORT=${process.env.APP_PORT || '3001'} bash scripts/aift-sync-handshake.sh >/dev/null 2>&1 & echo "Sync handshake audit started. Open handoff URL: http://127.0.0.1:3999/status"`], cwd: repoRoot };
       case 'refresh-node':
         return { cmd: 'git', args: ['pull', '--ff-only'], cwd: repoRoot };
       case 'restart-dashboard':
