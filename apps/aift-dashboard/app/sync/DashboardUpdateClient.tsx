@@ -48,6 +48,14 @@ export function DashboardUpdateClient() {
     setBusy('');
   }
 
+  async function ensurePhonePorts() {
+    setBusy('ports');
+    setOutput({ title: 'Phone port recovery', text: 'Checking dashboard and handoff ports...', ok: null });
+    const data = await runAction('ensure-phone-ports');
+    setOutput({ title: data.ok ? 'Phone ports are open' : 'Phone port recovery needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
+    setBusy('');
+  }
+
   async function updateFiles() {
     setBusy('update');
     setOutput({ title: 'Updating dashboard files', text: 'Checking GitHub and updating the local AIFT VPS checkout...', ok: null });
@@ -82,6 +90,7 @@ export function DashboardUpdateClient() {
       <p className="muted">Use one handshake button to update files, restart the whole dashboard, and move to the handoff page while the main app rebuilds.</p>
       <div className="toolbar">
         <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={syncHandshake}>{busy === 'handshake' ? 'Starting handshake...' : 'Sync handshake'}</button>
+        <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={ensurePhonePorts}>{busy === 'ports' ? 'Checking ports...' : 'Ensure phone ports are open'}</button>
         <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={runWiringCheck}>{busy === 'wiring' ? 'Checking wiring...' : 'Run wiring check'}</button>
         <a className="btn secondary" href={handoffUrl}>Open handoff page</a>
         <a className="btn secondary" href={handoffExportUrl}>Export sync handoff log</a>
