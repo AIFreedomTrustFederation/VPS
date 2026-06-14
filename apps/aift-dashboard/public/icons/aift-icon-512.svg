@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="AIFT Cloud">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="0.5" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#050810"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#g)" stroke-width="28"/>
+  <path d="M138 276c42-80 78-120 118-120s76 40 118 120" fill="none" stroke="#f8fafc" stroke-width="34" stroke-linecap="round"/>
+  <path d="M186 326h138" stroke="#38bdf8" stroke-width="28" stroke-linecap="round"/>
+  <path d="M326 326h2" stroke="#f59e0b" stroke-width="28" stroke-linecap="round"/>
+</svg>
