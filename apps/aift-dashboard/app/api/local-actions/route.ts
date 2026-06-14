@@ -31,9 +31,6 @@ function runAction(action: ActionId) {
   const appDir = path.join(repoRoot, 'apps', 'aift-dashboard');
   const home = process.env.HOME || '.';
   const baseHome = process.env.AIFT_HOME || `${home}/.aift-webai`;
-  const restartLog = `${baseHome}/logs/dashboard-restart.log`;
-  const handoffLog = `${baseHome}/logs/sync-handoff.log`;
-  const readyFile = `${baseHome}/runtime/dashboard-ready.json`;
 
   const command = (() => {
     switch (action) {
@@ -44,8 +41,7 @@ function runAction(action: ActionId) {
       case 'refresh-node':
         return { cmd: 'git', args: ['pull', '--ff-only'], cwd: repoRoot };
       case 'restart-dashboard':
-        return { cmd: 'bash', args: ['-lc', `mkdir -p ${baseHome}/logs ${baseHome}/runtime; printf '{"state":"starting","message":"Dashboard restart is running. Keep this handoff page open.","updated_at":"%s"}
-' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ${readyFile}; cd ${repoRoot}; (node scripts/aift-sync-handoff-server.mjs > ${handoffLog} 2>&1 &) ; (sleep 1; pkill -f "next dev" || true; rm -rf apps/aift-dashboard/.next; bash scripts/aift-start-dashboard.sh) > ${restartLog} 2>&1 & echo "Dashboard restart scheduled. Open handoff URL: http://127.0.0.1:3999"`], cwd: repoRoot };
+        return { cmd: 'bash', args: ['-lc', `cd ${repoRoot}; AIFT_HOME=${baseHome} APP_PORT=${process.env.APP_PORT || '3001'} nohup bash scripts/aift-dashboard-supervisor.sh >/dev/null 2>&1 & echo "Detached dashboard supervisor scheduled. Open handoff URL: http://127.0.0.1:3999/status"`], cwd: repoRoot };
       case 'write-heartbeat':
         return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-heartbeat-with-port.sh')], cwd: repoRoot };
       case 'list-services':
