@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeLocalActionLog } from '@/lib/local-action-log';
 
 const actions = [
-  { id: 'bluegreen-sync', label: 'Blue/green sync and promote' },
+  { id: 'bluegreen-sync', label: 'Blue/green validate candidate' },
   { id: 'sync-handshake', label: 'Legacy sync handshake' },
   { id: 'ensure-phone-ports', label: 'Ensure phone ports are open' },
   { id: 'refresh-node', label: 'Refresh node from GitHub' },
@@ -44,7 +44,7 @@ function runAction(action: ActionId) {
       case 'bluegreen-sync':
         return {
           cmd: 'bash',
-          args: ['-lc', `cd ${shellEscape(repoRoot)}; AIFT_HOME=${shellEscape(baseHome)} APP_PORT=${shellEscape(appPort)} AIFT_CANDIDATE_DASHBOARD_PORT=${shellEscape(candidatePort)} nohup bash scripts/aift-bluegreen-sync.sh >/dev/null 2>&1 & echo "Blue/green sync started. Open handoff URL: http://127.0.0.1:3999/status"`],
+          args: ['-lc', `cd ${shellEscape(repoRoot)}; AIFT_HOME=${shellEscape(baseHome)} APP_PORT=${shellEscape(appPort)} AIFT_CANDIDATE_DASHBOARD_PORT=${shellEscape(candidatePort)} nohup bash scripts/aift-bluegreen-validate.sh >/dev/null 2>&1 & echo "Blue/green candidate validation started. Open handoff URL: http://127.0.0.1:3999/status"`],
           cwd: repoRoot
         };
       case 'sync-handshake':
