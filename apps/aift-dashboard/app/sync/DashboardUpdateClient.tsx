@@ -22,9 +22,9 @@ const handoffExportUrl = 'http://127.0.0.1:3999/export';
 const checkUrls = ['/api/dashboard-ready', '/api/repo-status', '/api/local-actions', '/api/services', '/api/engine/report', '/api/engine/collections'];
 const initialSteps: FlowStep[] = [
   { key: 'ports', label: 'Verify phone ports and handoff server', state: 'waiting' },
-  { key: 'sync', label: 'Sync repo and schedule detached supervisor', state: 'waiting' },
-  { key: 'handoff', label: 'Move safely to handoff while dashboard restarts', state: 'waiting' },
-  { key: 'ready', label: 'Wait for dashboard ready status', state: 'waiting' },
+  { key: 'candidate', label: 'Build isolated candidate dashboard', state: 'waiting' },
+  { key: 'health', label: 'Health-check candidate before promotion', state: 'waiting' },
+  { key: 'promote', label: 'Promote only after candidate is healthy', state: 'waiting' },
 ];
 
 async function runAction(action: string) {
@@ -68,7 +68,7 @@ export function DashboardUpdateClient() {
   async function safeRestartApp() {
     setBusy('safe-restart');
     setSteps(initialSteps);
-    setOutput({ title: 'Safe restart app flow', text: 'Starting ordered recovery flow. Manual buttons are locked until this finishes.', ok: null });
+    setOutput({ title: 'Blue/green sync flow', text: 'Starting isolated candidate build. Manual buttons are locked until the job is scheduled.', ok: null });
 
     setSteps((current) => updateStep(current, 'ports', 'running'));
     const ports = await runAction('ensure-phone-ports');
@@ -80,19 +80,20 @@ export function DashboardUpdateClient() {
     }
     setSteps((current) => updateStep(current, 'ports', 'complete'));
 
-    setSteps((current) => updateStep(current, 'sync', 'running'));
-    const sync = await runAction('sync-handshake');
+    setSteps((current) => updateStep(current, 'candidate', 'running'));
+    setSteps((current) => updateStep(current, 'health', 'running'));
+    const sync = await runAction('bluegreen-sync');
     if (!sync.ok) {
-      setSteps((current) => updateStep(current, 'sync', 'error'));
-      setOutput({ title: 'Sync handshake failed', text: sync.terminal || JSON.stringify(sync, null, 2), ok: false });
+      setSteps((current) => updateStep(current, 'candidate', 'error'));
+      setSteps((current) => updateStep(current, 'health', 'error'));
+      setOutput({ title: 'Blue/green sync failed to start', text: sync.terminal || JSON.stringify(sync, null, 2), ok: false });
       setBusy('');
       return;
     }
-    setSteps((current) => updateStep(current, 'sync', 'complete'));
 
-    setSteps((current) => updateStep(current, 'handoff', 'complete'));
-    setSteps((current) => updateStep(current, 'ready', 'running'));
-    setOutput({ title: 'Safe restart scheduled', text: `${ports.terminal || ''}\n\n${sync.terminal || ''}\n\nOpening handoff status while the detached supervisor restarts the dashboard.`, ok: true });
+    setSteps((current) => updateStep(current, 'candidate', 'complete'));
+    setSteps((current) => updateStep(current, 'promote', 'running'));
+    setOutput({ title: 'Blue/green sync scheduled', text: `${ports.terminal || ''}\n\n${sync.terminal || ''}\n\nThe candidate is building on an isolated port. Open handoff status to watch health and promotion.`, ok: true });
 
     window.setTimeout(() => {
       window.location.href = handoffStatusUrl;
@@ -101,11 +102,22 @@ export function DashboardUpdateClient() {
 
   async function syncHandshake() {
     setBusy('handshake');
-    setOutput({ title: 'Sync handshake', text: `Scheduling full sync handshake. Handoff URL: ${handoffUrl}`, ok: null });
+    setOutput({ title: 'Legacy sync handshake', text: `Scheduling legacy sync handshake. Handoff URL: ${handoffUrl}`, ok: null });
     const data = await runAction('sync-handshake');
-    setOutput({ title: data.ok ? 'Sync handshake scheduled' : 'Sync handshake needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
+    setOutput({ title: data.ok ? 'Legacy sync handshake scheduled' : 'Legacy sync handshake needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
     if (data.ok) {
       setTimeout(() => { window.location.href = handoffUrl; }, 650);
+    }
+    setBusy('');
+  }
+
+  async function bluegreenOnly() {
+    setBusy('bluegreen');
+    setOutput({ title: 'Blue/green sync', text: 'Scheduling isolated candidate build and health-gated promotion...', ok: null });
+    const data = await runAction('bluegreen-sync');
+    setOutput({ title: data.ok ? 'Blue/green sync scheduled' : 'Blue/green sync needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
+    if (data.ok) {
+      setTimeout(() => { window.location.href = handoffStatusUrl; }, 650);
     }
     setBusy('');
   }
@@ -128,7 +140,7 @@ export function DashboardUpdateClient() {
 
   async function restartDashboard() {
     setBusy('restart');
-    setOutput({ title: 'Starting detached dashboard supervisor', text: `The supervisor will restart the dashboard on the same port. Handoff URL: ${handoffUrl}`, ok: null });
+    setOutput({ title: 'Starting detached dashboard supervisor', text: `The supervisor restarts the dashboard by PID and waits for health. Handoff URL: ${handoffUrl}`, ok: null });
     const data = await runAction('restart-dashboard');
     setOutput({ title: data.ok ? 'Dashboard supervisor scheduled' : 'Dashboard restart needs attention', text: data.terminal || JSON.stringify(data, null, 2), ok: Boolean(data.ok) });
     setBusy('');
@@ -148,10 +160,10 @@ export function DashboardUpdateClient() {
 
   return (
     <section className="panel-card">
-      <h2>Safe app restart</h2>
-      <p className="muted">Use one button for the ordered flow. It checks phone ports, syncs the repo, launches the detached supervisor, then moves to handoff while the dashboard comes back on the same port.</p>
+      <h2>Blue/green dashboard sync</h2>
+      <p className="muted">Use one button for the safe flow. It checks ports, builds a separate candidate dashboard, waits for real HTTP health, then promotes only after the candidate is healthy.</p>
       <div className="toolbar">
-        <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={safeRestartApp}>{busy === 'safe-restart' ? 'Running safe restart...' : 'Restart AIFT Cloud safely'}</button>
+        <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={safeRestartApp}>{busy === 'safe-restart' ? 'Scheduling blue/green sync...' : 'Sync AIFT Cloud safely'}</button>
         <a className="btn secondary" href={handoffStatusUrl}>Open handoff status</a>
         <a className="btn secondary" href={handoffExportUrl}>Export logs</a>
         <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={runWiringCheck}>{busy === 'wiring' ? 'Checking wiring...' : 'Run wiring check'}</button>
@@ -172,12 +184,13 @@ export function DashboardUpdateClient() {
       {showManual && (
         <div className="log-panel">
           <h4>Manual fallback controls</h4>
-          <div className="explainer">Use these only when the safe restart flow needs manual recovery.</div>
+          <div className="explainer">Use these only when the blue/green flow needs manual recovery.</div>
           <div className="toolbar">
             <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={ensurePhonePorts}>{busy === 'ports' ? 'Checking ports...' : 'Ensure phone ports are open'}</button>
-            <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={syncHandshake}>{busy === 'handshake' ? 'Starting handshake...' : 'Sync handshake only'}</button>
+            <button className="btn complete" type="button" disabled={Boolean(busy)} onClick={bluegreenOnly}>{busy === 'bluegreen' ? 'Starting blue/green...' : 'Blue/green sync only'}</button>
+            <button className="btn secondary" type="button" disabled={Boolean(busy)} onClick={syncHandshake}>{busy === 'handshake' ? 'Starting legacy handshake...' : 'Legacy handshake only'}</button>
             <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={updateFiles}>{busy === 'update' ? 'Updating...' : 'Update files only'}</button>
-            <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={restartDashboard}>{busy === 'restart' ? 'Restarting...' : 'Restart supervisor only'}</button>
+            <button className="btn ready-next" type="button" disabled={Boolean(busy)} onClick={restartDashboard}>{busy === 'restart' ? 'Restarting...' : 'PID restart only'}</button>
             <a className="btn secondary" href="/logs">Open logs</a>
           </div>
         </div>
