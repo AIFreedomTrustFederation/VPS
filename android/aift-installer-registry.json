@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "registry_name": "AIFT Installer Hub Registry",
+  "updated_by": "AIFT Cloud",
+  "install_policy": {
+    "mode": "ordered-first-run-then-async-updates",
+    "apk_install_requires_android_confirmation": true,
+    "runtime_must_start_before_modules": true
+  },
+  "installers": [
+    {
+      "id": "aift-cloud-runtime",
+      "title": "AIFT Cloud Runtime",
+      "package_name": "org.aift.cloud",
+      "release_tag": "aift-cloud-runtime-latest",
+      "apk_name": "aift-cloud-runtime-debug.apk",
+      "download_url": "https://github.com/AIFreedomTrustFederation/VPS/releases/download/aift-cloud-runtime-latest/aift-cloud-runtime-debug.apk",
+      "install_order": 10,
+      "requires": [],
+      "can_install_async": false,
+      "start_after_install": true,
+      "health_check_url": "http://127.0.0.1:3001/api/dashboard-ready",
+      "handoff_url": "http://127.0.0.1:3999/status",
+      "start_url": "http://127.0.0.1:3001/sync"
+    },
+    {
+      "id": "capital-city-provisions-runtime",
+      "title": "Capital City Provisions",
+      "package_name": "org.aift.capital_city_provisions",
+      "release_tag": "capital-city-provisions-runtime-latest",
+      "apk_name": "capital-city-provisions-runtime-debug.apk",
+      "download_url": "https://github.com/AIFreedomTrustFederation/VPS/releases/download/capital-city-provisions-runtime-latest/capital-city-provisions-runtime-debug.apk",
+      "install_order": 20,
+      "requires": ["aift-cloud-runtime"],
+      "can_install_async": true,
+      "start_after_install": false,
+      "health_check_url": "http://127.0.0.1:3001/api/app-sources/capital-city-provisions",
+      "handoff_url": "http://127.0.0.1:3999/status",
+      "start_url": "http://127.0.0.1:3001/sites"
+    },
+    {
+      "id": "aift-provider-node-runtime",
+      "title": "AIFT Provider Node",
+      "package_name": "org.aift.provider_node",
+      "release_tag": "aift-provider-node-runtime-latest",
+      "apk_name": "aift-provider-node-runtime-debug.apk",
+      "download_url": "https://github.com/AIFreedomTrustFederation/VPS/releases/download/aift-provider-node-runtime-latest/aift-provider-node-runtime-debug.apk",
+      "install_order": 30,
+      "requires": ["aift-cloud-runtime"],
+      "can_install_async": true,
+      "start_after_install": false,
+      "health_check_url": "http://127.0.0.1:3001/api/services",
+      "handoff_url": "http://127.0.0.1:3999/status",
+      "start_url": "http://127.0.0.1:3001/nodes"
+    },
+    {
+      "id": "aift-webai-runtime",
+      "title": "AIFT WebAI",
+      "package_name": "org.aift.webai",
+      "release_tag": "aift-webai-runtime-latest",
+      "apk_name": "aift-webai-runtime-debug.apk",
+      "download_url": "https://github.com/AIFreedomTrustFederation/VPS/releases/download/aift-webai-runtime-latest/aift-webai-runtime-debug.apk",
+      "install_order": 40,
+      "requires": ["aift-cloud-runtime"],
+      "can_install_async": true,
+      "start_after_install": false,
+      "health_check_url": "http://127.0.0.1:3001/api/webai/runtime-status",
+      "handoff_url": "http://127.0.0.1:3999/status",
+      "start_url": "http://127.0.0.1:3001/webai"
+    }
+  ]
+}
