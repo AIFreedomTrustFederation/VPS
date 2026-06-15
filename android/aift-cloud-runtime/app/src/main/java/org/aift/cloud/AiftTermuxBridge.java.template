@@ -1,0 +1,25 @@
+package org.aift.cloud;
+
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+
+public final class AiftTermuxBridge {
+    private AiftTermuxBridge() {}
+
+    public static boolean start(Context context) {
+        try {
+            Intent intent = new Intent("com.termux.RUN_COMMAND");
+            intent.setComponent(new ComponentName("com.termux", "com.termux.app.RunCommandService"));
+            intent.putExtra("com.termux.RUN_COMMAND_PATH", "__TERMUX_BASH_PATH__");
+            intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"scripts/aift-phone-launch.sh"});
+            intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", "__AIFT_NODE_DIR__");
+            intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
+            intent.putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0");
+            context.startService(intent);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+}
