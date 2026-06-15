@@ -1,22 +1,17 @@
 package org.aift.cloud;
 
 import android.content.Context;
-import android.content.Intent;
-import android.net.Uri;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
 
 public final class AiftRuntimeManager {
     private static final String READY_URL = "http://127.0.0.1:3001/api/dashboard-ready";
-    private static final String HANDOFF_URL = "http://127.0.0.1:3999/status";
 
     private AiftRuntimeManager() {}
 
     public static void startRuntime(Context context) {
-        openUrl(context, HANDOFF_URL);
-        // Phase 1 bridge target: invoke Termux-compatible launcher.
-        // Phase 2 target: replace this with embedded AIFT runtime bootstrap.
+        AiftTermuxBridge.start(context);
     }
 
     public static void waitForDashboard(Runnable onReady) {
@@ -47,16 +42,6 @@ public final class AiftRuntimeManager {
             return code >= 200 && code < 300;
         } catch (Exception ignored) {
             return false;
-        }
-    }
-
-    private static void openUrl(Context context, String url) {
-        try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
-        } catch (Exception ignored) {
-            // The WebView activity still loads the same URL.
         }
     }
 }
