@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 ROOT="${AIFT_ANDROID_RUNTIME_DIR:-android/aift-cloud-runtime}"
-mkdir -p "$ROOT"
+SRC_DIR="$ROOT/app/src/main/java/org/aift/cloud"
+mkdir -p "$ROOT" "$SRC_DIR"
 
 cat > "$ROOT/settings.gradle" <<'EOF'
 pluginManagement {
@@ -37,5 +38,13 @@ android.useAndroidX=false
 android.nonTransitiveRClass=true
 EOF
 
+if [ -f "$SRC_DIR/AiftTermuxBridge.java.template" ]; then
+  sed \
+    -e 's#__TERMUX_BASH_PATH__#/data/data/com.termux/files/usr/bin/bash#g' \
+    -e 's#__AIFT_NODE_DIR__#/data/data/com.termux/files/home/aift-termux-node-002#g' \
+    "$SRC_DIR/AiftTermuxBridge.java.template" > "$SRC_DIR/AiftTermuxBridge.java"
+fi
+
 printf 'AIFT Android runtime Gradle files written in %s\n' "$ROOT"
+printf 'AIFT Android Termux bridge generated when template is present.\n'
 printf 'Next: cd %s && gradle assembleDebug\n' "$ROOT"
