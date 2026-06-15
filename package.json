@@ -1,0 +1,21 @@
+{
+  "name": "aift-vps-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/aift-dashboard",
+    "apps/aift-desktop",
+    "apps/aift-android"
+  ],
+  "scripts": {
+    "dashboard:dev": "npm --workspace apps/aift-dashboard run dev",
+    "dashboard:build": "npm --workspace apps/aift-dashboard run build",
+    "dashboard:start": "npm --workspace apps/aift-dashboard run start",
+    "desktop:dev": "npm --workspace apps/aift-desktop run dev",
+    "desktop:build:win": "npm --workspace apps/aift-desktop run build:win",
+    "android:sync": "npm --workspace apps/aift-android run sync",
+    "android:open": "npm --workspace apps/aift-android run open",
+    "android:build": "npm --workspace apps/aift-android run build"
+  }
+}
