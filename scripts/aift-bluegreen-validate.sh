@@ -43,16 +43,16 @@ port_open() {
   (echo > "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
 }
 
-log "AIFT BLUE/GREEN VALIDATION"
+log "AIFT BLUE/GREEN ROUTER PROMOTION"
 log "Started at: $(now_utc)"
 log "Node directory: $NODE_DIR"
 log "AIFT home: $AIFT_HOME_DIR"
-log "Public dashboard port left untouched: $PUBLIC_PORT"
+log "Public router port: $PUBLIC_PORT"
 log "Candidate validation port: $CANDIDATE_PORT"
 
 cd "$NODE_DIR" || fail "Node directory is unavailable."
 
-write_ready "checking" "Checking repository state before non-destructive candidate validation."
+write_ready "checking" "Checking repository state before candidate build."
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
 LOCAL_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
@@ -60,7 +60,7 @@ log "Branch: $BRANCH"
 log "Local commit: $LOCAL_COMMIT"
 
 log "Fetching origin/$BRANCH."
-git fetch origin "$BRANCH" || fail "Git fetch failed. Public dashboard was not touched."
+git fetch origin "$BRANCH" || fail "Git fetch failed. Active router target was not changed."
 
 REMOTE_COMMIT="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo unknown)"
 COUNTS="$(git rev-list --left-right --count "HEAD...origin/$BRANCH" 2>/dev/null || echo '0 0')"
@@ -71,7 +71,7 @@ log "Ahead: $AHEAD"
 log "Behind: $BEHIND"
 
 if [ "$AHEAD" != "0" ]; then
-  fail "Local repo is ahead or diverged. Refusing automated candidate validation to avoid overwriting local work."
+  fail "Local repo is ahead or diverged. Refusing automated candidate build to avoid overwriting local work."
 fi
 
 if [ "$BEHIND" = "0" ]; then
@@ -139,14 +139,14 @@ for attempt in $(seq 1 90); do
 done
 
 if [ "$CANDIDATE_READY" != "1" ]; then
-  fail "Candidate dashboard did not pass health check within 90 seconds. Public dashboard was not touched."
+  fail "Candidate dashboard did not pass health check within 90 seconds. Active router target was not changed."
 fi
 
-VALIDATED_AT="$(now_utc)"
-printf '{"target_host":"127.0.0.1","target_port":%s,"commit":"%s","branch":"%s","candidate_pid":%s,"validated_at":"%s","public_port":%s,"mode":"validated-candidate-public-untouched"}\n' "$CANDIDATE_PORT" "$TARGET_COMMIT" "$BRANCH" "$CANDIDATE_PID" "$VALIDATED_AT" "$PUBLIC_PORT" > "$ACTIVE_FILE"
+PROMOTED_AT="$(now_utc)"
+printf '{"target_host":"127.0.0.1","target_port":%s,"commit":"%s","branch":"%s","candidate_pid":%s,"promoted_at":"%s","public_port":%s,"mode":"router-active-target"}\n' "$CANDIDATE_PORT" "$TARGET_COMMIT" "$BRANCH" "$CANDIDATE_PID" "$PROMOTED_AT" "$PUBLIC_PORT" > "$ACTIVE_FILE"
 
-write_ready "ready" "Candidate validation complete. Public dashboard was left running to prevent downtime."
-log "GREEN Candidate validation complete."
-log "Candidate URL: http://127.0.0.1:$CANDIDATE_PORT"
-log "Public dashboard still running on port $PUBLIC_PORT"
+write_ready "ready" "Blue/green promotion complete. Router active target now points to the healthy candidate."
+log "GREEN Router target promotion complete."
+log "Router public URL remains: http://127.0.0.1:$PUBLIC_PORT"
+log "Active candidate target: http://127.0.0.1:$CANDIDATE_PORT"
 log "Finished at: $(now_utc)"
