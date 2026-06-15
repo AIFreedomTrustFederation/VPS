@@ -8,6 +8,7 @@ HANDOFF_PORT="${AIFT_HANDOFF_PORT:-3999}"
 LOG_DIR="$AIFT_HOME_DIR/logs"
 RUNTIME_DIR="$AIFT_HOME_DIR/runtime"
 READY_FILE="$RUNTIME_DIR/dashboard-ready.json"
+PID_FILE="$RUNTIME_DIR/dashboard.pid"
 SUPERVISOR_LOG="$LOG_DIR/dashboard-supervisor.log"
 DASHBOARD_LOG="$LOG_DIR/dashboard-runtime.log"
 HANDOFF_LOG="$LOG_DIR/sync-handoff.log"
@@ -51,14 +52,29 @@ else
   log "YELLOW handoff server could not be started."
 fi
 
-log "Stopping old dashboard process."
-pkill -f "next dev" >/dev/null 2>&1 || true
-sleep 2
+log "Stopping old dashboard process by PID file when available."
+if [ -f "$PID_FILE" ]; then
+  OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" >/dev/null 2>&1; then
+    log "Stopping dashboard PID $OLD_PID."
+    kill "$OLD_PID" >/dev/null 2>&1 || true
+    sleep 2
+    if kill -0 "$OLD_PID" >/dev/null 2>&1; then
+      log "Dashboard PID $OLD_PID did not exit; sending TERM again."
+      kill "$OLD_PID" >/dev/null 2>&1 || true
+      sleep 1
+    fi
+  else
+    log "PID file exists but no live dashboard process was found."
+  fi
+else
+  log "No dashboard PID file found; refusing broad pkill to avoid stopping unrelated Next.js apps."
+fi
 
 log "Clearing dashboard build cache."
 rm -rf apps/aift-dashboard/.next
 
-write_ready "starting" "Dashboard supervisor is starting the dashboard on the same phone port."
+write_ready "starting" "Dashboard supervisor is starting the dashboard and waiting for HTTP health."
 log "Launching dashboard detached on port $APP_PORT_VALUE."
 
 AIFT_NODE_DIR="$NODE_DIR" AIFT_HOME="$AIFT_HOME_DIR" APP_PORT="$APP_PORT_VALUE" AIFT_HANDOFF_PORT="$HANDOFF_PORT" bash scripts/aift-start-dashboard.sh > "$DASHBOARD_LOG" 2>&1 &
