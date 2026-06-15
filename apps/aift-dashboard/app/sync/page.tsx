@@ -10,6 +10,7 @@ const corePages = [
   ['/source-links', 'Sources'],
   ['/controls', 'Controls'],
   ['/readiness', 'Readiness'],
+  ['/node-status', 'Node Status'],
   ['/nodes', 'Nodes'],
   ['/sites', 'Sites'],
   ['/domains', 'Domains'],
@@ -19,6 +20,7 @@ const corePages = [
 
 const liveChecks = [
   ['/api/dashboard-ready', 'Ready state'],
+  ['/api/node-status', 'Node status'],
   ['/api/repo-status', 'Repo status'],
   ['/api/local-actions', 'Actions'],
   ['/api/local-action-logs', 'Action logs'],
@@ -33,7 +35,7 @@ export default function SyncPage() {
       <section className="hero-card">
         <p className="eyebrow">Sync</p>
         <h1>Dashboard sync</h1>
-        <p>Update the AIFT dashboard from GitHub, restart the local dashboard server, then wait for ready status before opening the refreshed page.</p>
+        <p>Update the AIFT dashboard from GitHub, route through the active node gateway, and keep the current phone URL visible.</p>
       </section>
 
       <section className="panel-card">
@@ -54,7 +56,7 @@ export default function SyncPage() {
 
       <section className="panel-card">
         <h2>Handoff and export server</h2>
-        <p className="muted">These links stay available on port 3999 while the dashboard restarts.</p>
+        <p className="muted">These links stay available on port 3999 while the dashboard restarts or promotes a candidate.</p>
         <div className="toolbar">
           <a className="btn secondary" href="http://127.0.0.1:3999">Handoff home</a>
           <a className="btn secondary" href="http://127.0.0.1:3999/status">Raw status</a>
@@ -76,8 +78,9 @@ export default function SyncPage() {
 
       <section className="panel-card">
         <h2>Update loop</h2>
-        <p className="muted">Use this order: Sync handshake, wait on handoff status, export logs, then return when the dashboard is ready.</p>
+        <p className="muted">Use this order: node status, blue/green sync, handoff status, export logs, then return when the dashboard is ready.</p>
         <div className="toolbar">
+          <a className="btn secondary" href="/node-status">Open node status</a>
           <a className="btn secondary" href="/logs">Open logs</a>
           <a className="btn secondary" href="/readiness">Open readiness</a>
         </div>
