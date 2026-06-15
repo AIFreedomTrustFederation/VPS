@@ -16,16 +16,22 @@ function readJson(file, fallback) {
   }
 }
 
+function safeId(value) {
+  return String(value || 'aift-termux-node').replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+}
+
 fs.mkdirSync(runtimeDir, { recursive: true });
 const previous = readJson(identityFile, {});
 const phone = readJson(phoneUrlFile, {});
 const now = new Date().toISOString();
-const nodeId = previous.node_id || `aift-${os.hostname() || 'termux-node'}`.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+const hostnameId = safeId(`aift-${os.hostname() || 'termux-node'}`);
+const nodeId = safeId(process.env.AIFT_NODE_ID || previous.node_id || hostnameId);
+const deviceName = process.env.AIFT_DEVICE_NAME || previous.device_name || os.hostname() || 'termux-node';
 
 const identity = {
   node_id: nodeId,
-  device_name: previous.device_name || os.hostname() || 'termux-node',
-  role: previous.role || 'mobile-provider-node',
+  device_name: deviceName,
+  role: process.env.AIFT_NODE_ROLE || previous.role || 'mobile-provider-node',
   platform: process.platform,
   arch: process.arch,
   last_known_ip: phone.ip || previous.last_known_ip || '127.0.0.1',
@@ -36,5 +42,6 @@ const identity = {
 
 fs.writeFileSync(identityFile, `${JSON.stringify(identity, null, 2)}\n`, 'utf8');
 console.log(`[AIFT node] ${identity.node_id}`);
+console.log(`[AIFT node] ${identity.device_name}`);
 console.log(`[AIFT node] ${identity.last_known_url || identity.last_known_ip}`);
 console.log(`[AIFT node] identity: ${identityFile}`);
