@@ -8,8 +8,10 @@ const port = Number(process.env.AIFT_HANDOFF_PORT || 3999);
 const host = process.env.AIFT_HANDOFF_HOST || '127.0.0.1';
 const appPort = process.env.APP_PORT || '3001';
 const home = process.env.AIFT_HOME || path.join(os.homedir(), '.aift-webai');
-const readyFile = path.join(home, 'runtime', 'dashboard-ready.json');
-const runningFile = path.join(home, 'runtime', 'dashboard-running.json');
+const runtimeDir = path.join(home, 'runtime');
+const readyFile = path.join(runtimeDir, 'dashboard-ready.json');
+const runningFile = path.join(runtimeDir, 'dashboard-running.json');
+const activeFile = path.join(runtimeDir, 'dashboard-active.json');
 const logDir = path.join(home, 'logs');
 
 function readState() {
@@ -51,7 +53,10 @@ function statusPayload() {
   return {
     state: readState(),
     running: readFileText(runningFile, 'No dashboard-running.json file yet.'),
+    active: readFileText(activeFile, 'No dashboard-active.json file yet.'),
     logs: {
+      bluegreen_sync: readLog('bluegreen-sync.log', 60000),
+      dashboard_candidate: readLog('dashboard-candidate.log', 60000),
       sync_handshake: readLog('sync-handshake.log'),
       sync_history: readLog('sync-history.log', 60000),
       dashboard_supervisor: readLog('dashboard-supervisor.log'),
@@ -74,6 +79,15 @@ function exportBundle() {
     '',
     '=== dashboard-running.json ===',
     payload.running,
+    '',
+    '=== dashboard-active.json ===',
+    payload.active,
+    '',
+    '=== bluegreen-sync.log ===',
+    payload.logs.bluegreen_sync,
+    '',
+    '=== dashboard-candidate.log ===',
+    payload.logs.dashboard_candidate,
     '',
     '=== sync-handshake.log ===',
     payload.logs.sync_handshake,
@@ -130,7 +144,7 @@ small { color: rgba(255,247,234,.62); }
 <body>
   <main class="shell">
     <section class="header">
-      <div class="eyebrow">AIFT Raw Sync Status</div>
+      <div class="eyebrow">AIFT Blue/Green Sync Status</div>
       <h1>${ready ? 'Ready' : 'Terminal status'}</h1>
       <div class="state">
         <strong>${escapeHtml(state.state || 'waiting')}</strong>
@@ -144,6 +158,10 @@ small { color: rgba(255,247,234,.62); }
         <a class="btn" href="/">Handoff</a>
       </div>
     </section>
+    ${terminalBlock('dashboard-ready.json', JSON.stringify(payload.state, null, 2))}
+    ${terminalBlock('dashboard-active.json', payload.active)}
+    ${terminalBlock('bluegreen-sync.log', payload.logs.bluegreen_sync)}
+    ${terminalBlock('dashboard-candidate.log', payload.logs.dashboard_candidate)}
     ${terminalBlock('dashboard-running.json', payload.running)}
     ${terminalBlock('sync-handshake.log', payload.logs.sync_handshake)}
     ${terminalBlock('sync-history.log', payload.logs.sync_history)}
@@ -184,8 +202,8 @@ small { color: rgba(255,247,234,.62); }
 <body>
   <main class="card">
     <div class="eyebrow">AIFT Sync Handoff</div>
-    <h1>${ready ? 'Dashboard ready' : 'Rebuilding dashboard'}</h1>
-    <p>This page stays alive while the main AIFT dashboard restarts, so you do not have to reload too early.</p>
+    <h1>${ready ? 'Dashboard ready' : 'Building candidate'}</h1>
+    <p>This page stays alive while the candidate dashboard builds, health-checks, and promotes.</p>
     <section class="state">
       <strong>${escapeHtml(state.state || 'waiting')}</strong>
       <p>${escapeHtml(state.message || '')}</p>
