@@ -8,4 +8,5 @@ AIFT_HOME_DIR="${AIFT_HOME:-$HOME/.aift-webai}"
 cd "$NODE_DIR"
 node scripts/aift-phone-url.mjs "$PORT_VALUE"
 node scripts/aift-node-identity.mjs
+node scripts/aift-seed-root-repo.mjs || true
 node scripts/aift-runtime-event.mjs node-status-refreshed "port=$PORT_VALUE" || true
