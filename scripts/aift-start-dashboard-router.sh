@@ -23,3 +23,4 @@ echo "$!" > "$RUNTIME_DIR/dashboard-router.pid"
 printf 'AIFT dashboard router started on %s:%s\n' "$ROUTER_HOST" "$ROUTER_PORT"
 printf 'Router PID: %s\n' "$(cat "$RUNTIME_DIR/dashboard-router.pid")"
 printf 'Active target file: %s\n' "$ACTIVE_FILE"
+node scripts/aift-phone-url.mjs "$ROUTER_PORT" || true
