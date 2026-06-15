@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeLocalActionLog } from '@/lib/local-action-log';
 
 const actions = [
-  { id: 'sync-handshake', label: 'Sync handshake' },
+  { id: 'bluegreen-sync', label: 'Blue/green sync and promote' },
+  { id: 'sync-handshake', label: 'Legacy sync handshake' },
   { id: 'ensure-phone-ports', label: 'Ensure phone ports are open' },
   { id: 'refresh-node', label: 'Refresh node from GitHub' },
   { id: 'restart-dashboard', label: 'Restart dashboard' },
@@ -26,22 +27,34 @@ function findRepoRoot() {
   return process.cwd();
 }
 
+function shellEscape(value: string) {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
 function runAction(action: ActionId) {
   const repoRoot = findRepoRoot();
   const appDir = path.join(repoRoot, 'apps', 'aift-dashboard');
   const home = process.env.HOME || '.';
   const baseHome = process.env.AIFT_HOME || `${home}/.aift-webai`;
+  const appPort = process.env.APP_PORT || '3001';
+  const candidatePort = process.env.AIFT_CANDIDATE_DASHBOARD_PORT || '3002';
 
   const command = (() => {
     switch (action) {
+      case 'bluegreen-sync':
+        return {
+          cmd: 'bash',
+          args: ['-lc', `cd ${shellEscape(repoRoot)}; AIFT_HOME=${shellEscape(baseHome)} APP_PORT=${shellEscape(appPort)} AIFT_CANDIDATE_DASHBOARD_PORT=${shellEscape(candidatePort)} nohup bash scripts/aift-bluegreen-sync.sh >/dev/null 2>&1 & echo "Blue/green sync started. Open handoff URL: http://127.0.0.1:3999/status"`],
+          cwd: repoRoot
+        };
       case 'sync-handshake':
-        return { cmd: 'bash', args: ['-lc', `cd ${repoRoot}; AIFT_HOME=${baseHome} APP_PORT=${process.env.APP_PORT || '3001'} bash scripts/aift-sync-handshake.sh >/dev/null 2>&1 & echo "Sync handshake audit started. Open handoff URL: http://127.0.0.1:3999/status"`], cwd: repoRoot };
+        return { cmd: 'bash', args: ['-lc', `cd ${shellEscape(repoRoot)}; AIFT_HOME=${shellEscape(baseHome)} APP_PORT=${shellEscape(appPort)} bash scripts/aift-sync-handshake.sh >/dev/null 2>&1 & echo "Legacy sync handshake audit started. Open handoff URL: http://127.0.0.1:3999/status"`], cwd: repoRoot };
       case 'ensure-phone-ports':
         return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-ensure-phone-ports.sh')], cwd: repoRoot };
       case 'refresh-node':
         return { cmd: 'git', args: ['pull', '--ff-only'], cwd: repoRoot };
       case 'restart-dashboard':
-        return { cmd: 'bash', args: ['-lc', `cd ${repoRoot}; AIFT_HOME=${baseHome} APP_PORT=${process.env.APP_PORT || '3001'} nohup bash scripts/aift-dashboard-supervisor.sh >/dev/null 2>&1 & echo "Detached dashboard supervisor scheduled. Open handoff URL: http://127.0.0.1:3999/status"`], cwd: repoRoot };
+        return { cmd: 'bash', args: ['-lc', `cd ${shellEscape(repoRoot)}; AIFT_HOME=${shellEscape(baseHome)} APP_PORT=${shellEscape(appPort)} nohup bash scripts/aift-dashboard-supervisor.sh >/dev/null 2>&1 & echo "Detached dashboard supervisor scheduled. Open handoff URL: http://127.0.0.1:3999/status"`], cwd: repoRoot };
       case 'write-heartbeat':
         return { cmd: 'bash', args: [path.join(repoRoot, 'scripts', 'aift-heartbeat-with-port.sh')], cwd: repoRoot };
       case 'list-services':
