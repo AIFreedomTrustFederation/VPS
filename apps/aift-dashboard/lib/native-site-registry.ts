@@ -120,6 +120,22 @@ export async function createNativeSite(input: { slug: string; title?: string; de
   return site;
 }
 
+async function verifyDeploymentArtifact(deployment: NativeDeployment) {
+  try {
+    const stat = await fs.stat(deployment.artifactPath);
+    if (!stat.isFile() || stat.size < 32) return 'Artifact file is missing or too small.';
+
+    const html = await fs.readFile(deployment.artifactPath, 'utf8');
+    if (!html.toLowerCase().includes('<!doctype html')) return 'Artifact does not contain a document doctype.';
+    if (!html.toLowerCase().includes('<html')) return 'Artifact does not contain an HTML root element.';
+    if (!html.toLowerCase().includes('</html>')) return 'Artifact does not contain a closing HTML element.';
+
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Artifact verification failed.';
+  }
+}
+
 export async function deployNativeSite(siteId: string, input: { html?: string; sourceType?: NativeDeployment['sourceType'] } = {}) {
   const registry = await readNativeSiteRegistry();
   const siteIndex = registry.sites.findIndex((site) => site.id === siteId);
@@ -154,22 +170,44 @@ export async function deployNativeSite(siteId: string, input: { html?: string; s
   await fs.mkdir(deploymentDir, { recursive: true });
   await fs.writeFile(artifactPath, input.html || buildDefaultHtml(site), 'utf8');
 
-  const activeAt = isoNow();
+  const checkedAt = isoNow();
+  const verificationError = await verifyDeploymentArtifact({ ...deployment, artifactPath });
   const next = await readNativeSiteRegistry();
   const nextSiteIndex = next.sites.findIndex((item) => item.id === site.id);
   const deploymentIndex = next.deployments.findIndex((item) => item.id === deploymentId);
 
   if (nextSiteIndex >= 0 && deploymentIndex >= 0) {
+    if (verificationError) {
+      next.deployments[deploymentIndex] = {
+        ...next.deployments[deploymentIndex],
+        status: 'failed',
+        healthStatus: 'unhealthy',
+        error: verificationError,
+        buildLog: [
+          ...next.deployments[deploymentIndex].buildLog,
+          `${checkedAt} artifact health check failed: ${verificationError}`,
+          `${checkedAt} old active deployment was preserved`
+        ]
+      };
+      next.sites[nextSiteIndex] = {
+        ...next.sites[nextSiteIndex],
+        status: next.sites[nextSiteIndex].activeDeploymentId ? 'active' : 'failed',
+        updatedAt: checkedAt
+      };
+      await saveRegistry(next);
+      return next.deployments[deploymentIndex];
+    }
+
     const oldActiveDeploymentId = next.sites[nextSiteIndex].activeDeploymentId;
     next.deployments[deploymentIndex] = {
       ...next.deployments[deploymentIndex],
       status: 'active',
       healthStatus: 'healthy',
-      activatedAt: activeAt,
+      activatedAt: checkedAt,
       buildLog: [
         ...next.deployments[deploymentIndex].buildLog,
-        `${activeAt} health check passed`,
-        `${activeAt} route switched after readiness confirmed`
+        `${checkedAt} artifact health check passed`,
+        `${checkedAt} route switched after readiness confirmed`
       ]
     };
     next.sites[nextSiteIndex] = {
@@ -177,7 +215,7 @@ export async function deployNativeSite(siteId: string, input: { html?: string; s
       status: 'active',
       activeDeploymentId: deploymentId,
       fallbackDeploymentId: oldActiveDeploymentId,
-      updatedAt: activeAt
+      updatedAt: checkedAt
     };
     await saveRegistry(next);
     return next.deployments[deploymentIndex];
@@ -203,7 +241,7 @@ export async function resolveNativeSite(slug: string) {
     site,
     activeDeployment,
     fallbackDeployment,
-    ready: site.status === 'active' && activeDeployment?.healthStatus === 'healthy'
+    ready: site.status === 'active' && activeDeployment?.status === 'active' && activeDeployment.healthStatus === 'healthy'
   };
 }
 
