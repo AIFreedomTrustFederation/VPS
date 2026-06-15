@@ -97,6 +97,8 @@ if [ "$READY" = "1" ]; then
   READY_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '{"state":"ready","message":"Dashboard health check passed. Return to AIFT Cloud.","updated_at":"%s","commit":"%s","port":"%s"}\n' "$READY_AT" "$RUNNING_COMMIT" "$ASSIGNED_PORT" > "$RUNTIME_DIR/dashboard-ready.json"
   printf '[AIFT VPS] Dashboard health check passed.\n'
+  cd "$NODE_DIR"
+  node scripts/aift-phone-url.mjs "$ASSIGNED_PORT" || true
 else
   FAILED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '{"state":"error","message":"Dashboard did not pass HTTP health check within 60 seconds.","updated_at":"%s","commit":"%s","port":"%s"}\n' "$FAILED_AT" "$RUNNING_COMMIT" "$ASSIGNED_PORT" > "$RUNTIME_DIR/dashboard-ready.json"
