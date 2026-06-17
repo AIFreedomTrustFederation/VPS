@@ -2,6 +2,64 @@
 
 AI Freedom Trust Cloud App Foundry is a mobile-first, open-source, decentralized VPS cloud, app builder, domain control panel, provider-node network, and future `.aft` registry system.
 
+## Federation Status
+
+| Field | Value |
+| --- | --- |
+| Status | Active |
+| Federation layer | Infrastructure |
+| Repository role | Decentralized cloud, app builder, provider-node network, routing, naming, and registry foundations |
+| Visibility | Public |
+| Primary language | TypeScript |
+
+## Purpose
+
+`VPS` is the primary infrastructure lane for AI Freedom Trust Federation. It is where the AIFT Cloud App Foundry, decentralized VPS dashboard, provider-node model, app deployment workflow, registry foundations, and gateway/routing doctrine are built.
+
+## Current Capabilities
+
+- Next.js dashboard workspace in `apps/aift-dashboard`.
+- Desktop and Android app workspaces.
+- Termux/mobile provider-node foundations.
+- App registry examples and local node logs.
+- Dashboard routes for apps, templates, builds, deployments, nodes, sync, controls, logs, readiness, WebAI, and app profiles.
+- Native AFT Site Registry foundation and sync/restart readiness flow.
+
+## Setup
+
+```bash
+npm install
+```
+
+## Verification
+
+Primary dashboard checks:
+
+```bash
+npm run dashboard:build
+```
+
+Development commands:
+
+```bash
+npm run dashboard:dev
+npm run desktop:dev
+npm run android:sync
+```
+
+If a command fails because the environment lacks Android, desktop, or node-specific tooling, document that limitation in the issue or pull request.
+
+## Roadmap
+
+1. Complete native AFT site registry flow.
+2. Harden app-source intake, workspace sync, dependency install, build, and preview lifecycle.
+3. Build provider-style domain/name/site/app control panel UX.
+4. Add signed service records, gateway routing, health checks, fallback deploys, and truthful node disclosure.
+
+## Public Claims Note
+
+Do not claim production decentralization, registry authority, security guarantees, or live routing capability until the implementation, deployment, and verification path are documented and working.
+
 This repository is the source of truth for building AIFT Cloud from the ground up. Every new feature should support the mission below, and every phase should move us closer to a real decentralized cloud that can host applications, route names, disclose infrastructure, and reduce dependence on centralized registries, centralized clouds, and centralized DNS control points.
 
 ---
