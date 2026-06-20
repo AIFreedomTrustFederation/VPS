@@ -19,11 +19,21 @@ AI Freedom Trust Cloud App Foundry is a mobile-first, open-source, decentralized
 ## Current Capabilities
 
 - Next.js dashboard workspace in `apps/aift-dashboard`.
-- Desktop and Android app workspaces.
+- Desktop workspace and Android runtime target.
+- Node agent package in `apps/aift-node-agent`.
 - Termux/mobile provider-node foundations.
 - App registry examples and local node logs.
 - Dashboard routes for apps, templates, builds, deployments, nodes, sync, controls, logs, readiness, WebAI, and app profiles.
 - Native AFT Site Registry foundation and sync/restart readiness flow.
+
+## Operating Docs
+
+- `docs/status.md` - current verified status and public-claim boundary.
+- `docs/validation.md` - local, dashboard, node-agent, and Android validation commands.
+- `docs/security-and-privacy.md` - security and privacy map for infrastructure work.
+- `docs/security-baseline.md` - server and deployment hardening baseline.
+- `docs/secret-management-policy.md` - secret handling and display rules.
+- `docs/production-readiness-rules.md` - no-fake-green production behavior rules.
 
 ## Setup
 
@@ -33,9 +43,16 @@ npm install
 
 ## Verification
 
-Primary dashboard checks:
+Lightweight repo checks:
 
 ```bash
+npm run qa:local
+```
+
+Primary dashboard checks, after installing dependencies:
+
+```bash
+npm install
 npm run dashboard:build
 ```
 
@@ -44,7 +61,9 @@ Development commands:
 ```bash
 npm run dashboard:dev
 npm run desktop:dev
+npm run node-agent:build
 npm run android:sync
+npm run android:build
 ```
 
 If a command fails because the environment lacks Android, desktop, or node-specific tooling, document that limitation in the issue or pull request.
