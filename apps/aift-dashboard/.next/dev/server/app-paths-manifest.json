@@ -1,0 +1,4 @@
+{
+  "/api/node-status/route": "app/api/node-status/route.js",
+  "/node-status/page": "app/node-status/page.js"
+}
