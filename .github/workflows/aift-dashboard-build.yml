@@ -13,9 +13,17 @@ on:
       - '.github/workflows/aift-dashboard-build.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-dashboard:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/aift-dashboard
@@ -30,16 +38,19 @@ jobs:
       AIFT_NODE_TOKEN: test-node-token
       COOLIFY_URL: https://example.invalid
       COOLIFY_API_TOKEN: test-coolify-token
+      NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/aift-dashboard/package.json
+          cache-dependency-path: apps/aift-dashboard/package-lock.json
 
       - name: Prepare test registries
         run: |
@@ -67,7 +78,7 @@ jobs:
           test -f lib/health.ts
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Build dashboard
         id: dashboard_build
@@ -93,7 +104,7 @@ jobs:
 
       - name: Upload build report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: aift-dashboard-build-report
           path: |
