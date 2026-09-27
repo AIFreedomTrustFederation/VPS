@@ -49,7 +49,15 @@ No UI should claim completion before the action actually completes.
 
 A state is not true until the system proves it through logs, checks, readiness state, route health, or dashboard status.
 
-Use `npm run qa:local` as the dependency-light repo gate for structure, workspace wiring, registry files, Android runtime placement, and installer registry integrity.
+Use Node.js 22 and run the same dependency-light, non-mutating gate enforced by CI:
+
+```sh
+npm run qa:local
+git diff --check
+test -z "$(git status --porcelain)"
+```
+
+The repository gate covers structure, workspace wiring, registry files, Android runtime placement, and installer registry integrity. Do not leave generated or untracked artifacts in the checkout.
 
 Use area-specific checks from `docs/validation.md` for dashboard, node-agent, desktop, Android, runtime, or routing changes. Do not call a build, route, APK, node, or deployment ready unless the matching command, artifact, route health, or log has been verified.
 
