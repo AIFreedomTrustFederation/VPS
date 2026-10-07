@@ -64,7 +64,9 @@ jobs:
           body: |
             Latest debug APK for the AIFT Cloud Android Runtime.
 
-            Download the APK asset below and install it on Android.
+            Download both assets, then verify the APK before installation:
+
+            `sha256sum --check aift-cloud-runtime-debug.apk.sha256`
           files: |
             dist/aift-cloud-runtime-debug.apk
             dist/aift-cloud-runtime-debug.apk.sha256
