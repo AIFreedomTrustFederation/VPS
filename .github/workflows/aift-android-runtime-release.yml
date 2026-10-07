@@ -3,6 +3,8 @@ name: Release AIFT Android Runtime APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
       - 'android/aift-cloud-runtime/**'
       - 'scripts/aift-android-runtime-bootstrap.sh'
