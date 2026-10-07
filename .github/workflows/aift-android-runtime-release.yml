@@ -54,6 +54,7 @@ jobs:
         run: |
           mkdir -p dist
           cp android/aift-cloud-runtime/app/build/outputs/apk/debug/app-debug.apk dist/aift-cloud-runtime-debug.apk
+          sha256sum dist/aift-cloud-runtime-debug.apk > dist/aift-cloud-runtime-debug.apk.sha256
 
       - name: Publish latest APK release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
@@ -64,7 +65,9 @@ jobs:
             Latest debug APK for the AIFT Cloud Android Runtime.
 
             Download the APK asset below and install it on Android.
-          files: dist/aift-cloud-runtime-debug.apk
+          files: |
+            dist/aift-cloud-runtime-debug.apk
+            dist/aift-cloud-runtime-debug.apk.sha256
           draft: false
           prerelease: true
           make_latest: true
