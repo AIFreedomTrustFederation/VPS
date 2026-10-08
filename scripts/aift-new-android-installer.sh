@@ -26,6 +26,12 @@ if [ -z "$APP_TITLE" ]; then
   APP_TITLE="$(printf '%s' "$APP_SLUG" | tr '-' ' ' | sed 's/\b\([a-z]\)/\u\1/g')"
 fi
 
+APP_TITLE_PATTERN='^[^"\\<>&[:cntrl:]]+$'
+if [[ ! "$APP_TITLE" =~ $APP_TITLE_PATTERN ]]; then
+  echo "Error: app title must not contain quotes, backslashes, XML delimiters, or control characters." >&2
+  exit 1
+fi
+
 CLASS_BASE="$(printf '%s' "$APP_SLUG" | tr '-' ' ' | sed 's/\b\([a-z]\)/\u\1/g' | tr -d ' ')"
 PACKAGE_SUFFIX="$(printf '%s' "$APP_SLUG" | tr '-' '_' | tr -cd '[:alnum:]_')"
 PROJECT_DIR="android/${APP_SLUG}-runtime"
