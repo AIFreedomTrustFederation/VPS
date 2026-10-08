@@ -297,12 +297,15 @@ jobs:
         run: |
           mkdir -p dist
           cp $PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk dist/$APK_NAME
+          sha256sum dist/$APK_NAME > dist/$APK_NAME.sha256
       - name: Publish latest APK release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: $RELEASE_TAG
           name: $APP_TITLE Runtime Latest
-          files: dist/$APK_NAME
+          files: |
+            dist/$APK_NAME
+            dist/$APK_NAME.sha256
           draft: false
           prerelease: true
           make_latest: true
