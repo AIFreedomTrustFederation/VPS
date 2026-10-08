@@ -289,7 +289,7 @@ jobs:
           mkdir -p dist
           cp $PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk dist/$APK_NAME
       - name: Publish latest APK release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: $RELEASE_TAG
           name: $APP_TITLE Runtime Latest
