@@ -260,6 +260,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${APP_SLUG}-runtime-release-\${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release-apk:
     runs-on: ubuntu-24.04
