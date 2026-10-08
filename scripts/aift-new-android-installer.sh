@@ -124,9 +124,13 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.io.ByteArrayInputStream;
+import java.util.Collections;
 
 public class ${CLASS_BASE}Activity extends Activity {
     private static final String HANDOFF_URL = "http://127.0.0.1:3999/status";
@@ -136,6 +140,16 @@ public class ${CLASS_BASE}Activity extends Activity {
     private static boolean isAllowedLocalUrl(Uri uri) {
         if (!"http".equals(uri.getScheme()) || !"127.0.0.1".equals(uri.getHost())) return false;
         return uri.getPort() == 3001 || uri.getPort() == 3999;
+    }
+
+    private static WebResourceResponse blockedResponse() {
+        return new WebResourceResponse(
+                "text/plain",
+                "UTF-8",
+                403,
+                "Blocked",
+                Collections.emptyMap(),
+                new ByteArrayInputStream(new byte[0]));
     }
 
     @Override
@@ -150,6 +164,14 @@ public class ${CLASS_BASE}Activity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (isAllowedLocalUrl(request.getUrl())) {
+                    return super.shouldInterceptRequest(view, request);
+                }
+                return blockedResponse();
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return !isAllowedLocalUrl(request.getUrl());
