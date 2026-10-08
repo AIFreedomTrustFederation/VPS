@@ -38,11 +38,12 @@ PROJECT_DIR="android/${APP_SLUG}-runtime"
 APP_DIR="$PROJECT_DIR/app"
 SRC_DIR="$APP_DIR/src/main/java/org/aift/${PACKAGE_SUFFIX}"
 RES_DIR="$APP_DIR/src/main/res/values"
+XML_DIR="$APP_DIR/src/main/res/xml"
 WORKFLOW_FILE=".github/workflows/${APP_SLUG}-runtime-release.yml"
 RELEASE_TAG="${APP_SLUG}-runtime-latest"
 APK_NAME="${APP_SLUG}-runtime-debug.apk"
 
-mkdir -p "$SRC_DIR" "$RES_DIR" ".github/workflows"
+mkdir -p "$SRC_DIR" "$RES_DIR" "$XML_DIR" ".github/workflows"
 
 cat > "$APP_DIR/build.gradle" <<EOF
 plugins {
@@ -73,8 +74,9 @@ cat > "$APP_DIR/src/main/AndroidManifest.xml" <<EOF
     <application
         android:allowBackup="false"
         android:label="$APP_TITLE"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".${CLASS_BASE}Activity"
             android:exported="true">
@@ -90,6 +92,16 @@ cat > "$APP_DIR/src/main/AndroidManifest.xml" <<EOF
             android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
+EOF
+
+cat > "$XML_DIR/network_security_config.xml" <<'EOF'
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
 EOF
 
 cat > "$RES_DIR/styles.xml" <<'EOF'
