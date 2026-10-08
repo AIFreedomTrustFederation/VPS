@@ -244,6 +244,13 @@ Stable APK link after release workflow succeeds:
 \`\`\`text
 https://github.com/AIFreedomTrustFederation/VPS/releases/download/$RELEASE_TAG/$APK_NAME
 \`\`\`
+
+Download the checksum from the same release, then verify the APK before installation:
+
+\`\`\`bash
+curl -fLO https://github.com/AIFreedomTrustFederation/VPS/releases/download/$RELEASE_TAG/$APK_NAME.sha256
+sha256sum --check $APK_NAME.sha256
+\`\`\`
 EOF
 
 cat > "$WORKFLOW_FILE" <<EOF
