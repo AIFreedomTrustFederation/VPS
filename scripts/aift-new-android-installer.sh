@@ -11,6 +11,11 @@ if [ -z "$APP_SLUG" ]; then
   exit 1
 fi
 
+if [[ ! "$APP_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  echo "Error: app-slug must contain only lowercase letters, numbers, and single hyphens." >&2
+  exit 1
+fi
+
 if [ -z "$APP_TITLE" ]; then
   APP_TITLE="$(printf '%s' "$APP_SLUG" | tr '-' ' ' | sed 's/\b\([a-z]\)/\u\1/g')"
 fi
