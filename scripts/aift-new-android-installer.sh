@@ -121,7 +121,9 @@ package org.aift.${PACKAGE_SUFFIX};
 
 import android.app.Activity;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -131,6 +133,11 @@ public class ${CLASS_BASE}Activity extends Activity {
     private static final String START_URL = "http://127.0.0.1:3001${START_PATH}";
     private WebView webView;
 
+    private static boolean isAllowedLocalUrl(Uri uri) {
+        if (!"http".equals(uri.getScheme()) || !"127.0.0.1".equals(uri.getHost())) return false;
+        return uri.getPort() == 3001 || uri.getPort() == 3999;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -139,7 +146,17 @@ public class ${CLASS_BASE}Activity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return !isAllowedLocalUrl(request.getUrl());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return !isAllowedLocalUrl(Uri.parse(url));
+            }
+        });
         setContentView(webView);
         webView.loadUrl(HANDOFF_URL);
         ${CLASS_BASE}RuntimeManager.waitForDashboard(() -> runOnUiThread(() -> webView.loadUrl(START_URL)));
