@@ -273,6 +273,8 @@ jobs:
           java-version: '17'
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - name: Bootstrap Android runtime build files
         run: bash scripts/aift-android-runtime-bootstrap.sh
       - name: Set up Gradle
