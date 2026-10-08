@@ -16,6 +16,12 @@ if [[ ! "$APP_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
   exit 1
 fi
 
+START_PATH_PATTERN='^/[-A-Za-z0-9._~/:?=&%+#@,;]*$'
+if [[ ! "$START_PATH" =~ $START_PATH_PATTERN ]]; then
+  echo "Error: start-path must be an absolute URL path without whitespace or quotes." >&2
+  exit 1
+fi
+
 if [ -z "$APP_TITLE" ]; then
   APP_TITLE="$(printf '%s' "$APP_SLUG" | tr '-' ' ' | sed 's/\b\([a-z]\)/\u\1/g')"
 fi
