@@ -252,6 +252,8 @@ name: Release $APP_TITLE Runtime APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
       - '$PROJECT_DIR/**'
       - 'scripts/aift-android-runtime-bootstrap.sh'
