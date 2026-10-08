@@ -280,7 +280,7 @@ jobs:
       - name: Bootstrap Android runtime build files
         run: bash scripts/aift-android-runtime-bootstrap.sh
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
         with:
           gradle-version: '8.10.2'
       - name: Build debug APK
