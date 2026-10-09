@@ -8,8 +8,9 @@
     <application
         android:allowBackup="false"
         android:label="AIFT Cloud"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".AiftCloudActivity"
             android:exported="true">
