@@ -43,10 +43,15 @@ log "Running Gradle assembleDebug."
 gradle assembleDebug 2>&1 | tee -a "$LOG_FILE"
 STATUS=${PIPESTATUS[0]}
 
-if [ "$STATUS" = "0" ]; then
+APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+if [ "$STATUS" = "0" ] && [ -s "$APK_PATH" ]; then
   log "GREEN APK build completed."
-  log "APK path: app/build/outputs/apk/debug/app-debug.apk"
+  log "APK path: $APK_PATH"
 else
+  if [ "$STATUS" = "0" ]; then
+    STATUS=1
+    log "RED Gradle exited successfully but the expected APK is missing or empty: $APK_PATH"
+  fi
   log "RED APK build failed with exit code $STATUS. See $LOG_FILE"
 fi
 
