@@ -5,6 +5,7 @@ BUILD_SCRIPT="$REPO_ROOT/scripts/aift-build-android-runtime.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/project/scripts"
+# Keep mocks isolated; never modify repository build outputs.
 cp "$BUILD_SCRIPT" "$TMP/project/scripts/aift-build-android-runtime.sh"
 cat > "$TMP/bin/javac" <<'SH'
 #!/usr/bin/env bash
