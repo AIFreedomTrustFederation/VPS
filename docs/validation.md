@@ -68,6 +68,17 @@ npm run android:build
 
 `android:build` requires Bash, Java, Gradle, and an Android SDK. If any are unavailable, record the missing dependency and the next repair step.
 
+### Android build regression tests (SDK-free)
+
+Run the isolated build failure-handling tests without an Android SDK or Gradle installation:
+
+```bash
+bash -n scripts/aift-build-android-runtime.sh tests/test-android-build.sh
+bash tests/test-android-build.sh
+```
+
+These tests use temporary mock `gradle` and `javac` commands to check bootstrap failures, Gradle failures, missing APKs, empty APKs, and a successful artifact path. They do **not** build or authenticate a real Android APK. GitHub Actions runs the same checks through `.github/workflows/android-build-regression.yml` when relevant files change. Verify the actual workflow run result before claiming CI is green.
+
 ## Public Claim Rule
 
 A feature can be described as ready only when the relevant command, log, route health check, or artifact exists and has been verified. Otherwise use one of these states:
