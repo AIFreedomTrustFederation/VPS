@@ -93,6 +93,18 @@ npm run android:build
 
 The infrastructure contract is strict: no fake green state, no hidden routing claim, no simulated production data presented as live, no traffic switch before health verification, and no destructive sync merely because automation can perform it.
 
+### Android runtime APK release boundary
+
+The [Android runtime release workflow](.github/workflows/aift-android-runtime-release.yml) runs on changes to `android/aift-cloud-runtime/**`, its bootstrap script, or the workflow itself on `main`, and can also be started manually. It uses Java 17, bootstraps Android build files, runs Gradle 8.10.2 `assembleDebug`, and publishes `aift-cloud-runtime-debug.apk` with a SHA-256 checksum to the `aift-cloud-runtime-latest` prerelease tag.
+
+**This is a debug APK, not a signed production release.** The workflow's release publication step is reached only after the build and artifact preparation succeed; its presence in the repository does not establish that a recent run passed. Download both the APK and `.sha256` asset from the release and verify them in the same directory before installation:
+
+```bash
+sha256sum --check aift-cloud-runtime-debug.apk.sha256
+```
+
+The checksum checks file integrity against the accompanying checksum file; it does **not** independently authenticate the publisher or establish production signing, device compatibility, or runtime security. Check the actual workflow run and release provenance before distributing or trusting an artifact.
+
 Operating references include `docs/status.md`, `docs/validation.md`, `docs/security-and-privacy.md`, `docs/security-baseline.md`, `docs/secret-management-policy.md`, and `docs/production-readiness-rules.md`.
 
 ---
