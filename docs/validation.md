@@ -25,6 +25,7 @@ This runs:
 
 ```bash
 npm run verify:structure
+npm run verify:sources
 npm run verify:installer-registry
 ```
 
