@@ -28,6 +28,10 @@ SH
 run_case() {
   local mode="$1" expected="$2" status=0
   rm -rf "$TMP/runtime"
+  if [ "$mode" = stale ]; then
+    mkdir -p "$TMP/runtime/app/build/outputs/apk/debug"
+    printf 'old-apk' > "$TMP/runtime/app/build/outputs/apk/debug/app-debug.apk"
+  fi
   (cd "$TMP/project" && TEST_MODE="$mode" AIFT_HOME="$TMP/home" AIFT_ANDROID_RUNTIME_DIR="$TMP/runtime" PATH="$TMP/bin:$PATH" bash scripts/aift-build-android-runtime.sh) > "$TMP/output" 2>&1 || status=$?
   if [ "$expected" = success ]; then
     [ "$status" -eq 0 ] && grep -q 'GREEN APK build completed' "$TMP/output" || { cat "$TMP/output"; echo "FAIL: $mode"; exit 1; }
@@ -39,5 +43,6 @@ run_case() {
 run_case bootstrap-fail failure
 run_case gradle-fail failure
 run_case missing failure
+run_case stale failure
 run_case empty failure
 run_case valid success
