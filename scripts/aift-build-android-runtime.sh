@@ -39,11 +39,15 @@ cd "$ROOT" || {
   exit 1
 }
 
+APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+# Prevent an artifact left by an earlier build from masking a missing new APK.
+if [ -e "$APK_PATH" ]; then
+  rm -f -- "$APK_PATH" || { log "RED Cannot remove previous APK: $APK_PATH"; exit 1; }
+fi
+
 log "Running Gradle assembleDebug."
 gradle assembleDebug 2>&1 | tee -a "$LOG_FILE"
 STATUS=${PIPESTATUS[0]}
-
-APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 if [ "$STATUS" = "0" ] && [ -s "$APK_PATH" ]; then
   log "GREEN APK build completed."
   log "APK path: $APK_PATH"
