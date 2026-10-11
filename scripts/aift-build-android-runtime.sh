@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -uo pipefail
 
 ROOT="${AIFT_ANDROID_RUNTIME_DIR:-android/aift-cloud-runtime}"
 LOG_DIR="${AIFT_HOME:-$HOME/.aift-webai}/logs"
@@ -15,7 +15,10 @@ log "AIFT ANDROID RUNTIME BUILD CHECK"
 log "Started at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 log "Runtime dir: $ROOT"
 
-bash scripts/aift-android-runtime-bootstrap.sh 2>&1 | tee -a "$LOG_FILE"
+if ! bash scripts/aift-android-runtime-bootstrap.sh 2>&1 | tee -a "$LOG_FILE"; then
+  log "RED Android runtime bootstrap failed; aborting build. See $LOG_FILE"
+  exit 1
+fi
 
 if ! command -v gradle >/dev/null 2>&1; then
   log "RED Gradle is unavailable. In Termux run: pkg install gradle openjdk-17"
