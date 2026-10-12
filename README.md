@@ -97,6 +97,12 @@ The infrastructure contract is strict: no fake green state, no hidden routing cl
 
 The [Android runtime release workflow](.github/workflows/aift-android-runtime-release.yml) runs on changes to `android/aift-cloud-runtime/**`, its bootstrap script, or the workflow itself on `main`, and can also be started manually. It uses Java 17, bootstraps Android build files, runs Gradle 8.10.2 `assembleDebug`, and publishes `aift-cloud-runtime-debug.apk` with a SHA-256 checksum to the `aift-cloud-runtime-latest` prerelease tag.
 
+**Android SDK setup and historical failure:** The workflow explicitly sets `packages: platform-tools` for `android-actions/setup-android@v3`. This avoids the action's default legacy `tools` package request, which can fail with `sdkmanager` reporting `Failed to find package 'tools'`. The command-line SDK tools used by `sdkmanager` are provisioned by the action itself; `platform-tools` is an additional package. This configuration change addresses that specific setup failure, **not** the success of Gradle compilation, artifact publishing, or installation on an Android device. For local troubleshooting, inspect the `Set up Android SDK` step in the latest workflow run before diagnosing build failures, and validate the bootstrap script syntax without modifying Android build files:
+
+```bash
+bash -n scripts/aift-android-runtime-bootstrap.sh
+```
+
 **This is a debug APK, not a signed production release.** The workflow's release publication step is reached only after the build and artifact preparation succeed; its presence in the repository does not establish that a recent run passed. Download both the APK and `.sha256` asset from the release and verify them in the same directory before installation:
 
 ```bash
