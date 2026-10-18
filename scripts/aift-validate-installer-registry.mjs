@@ -48,6 +48,7 @@ if (!Array.isArray(registry.installers)) {
 
 const ids = new Set();
 const orders = new Set();
+const installersById = new Map(registry.installers.map((item) => [item.id, item]));
 for (const item of registry.installers) {
   for (const field of requiredFields) {
     if (!(field in item)) fail(`${item.id || 'unknown'} missing ${field}`);
@@ -56,9 +57,21 @@ for (const item of registry.installers) {
   ids.add(item.id);
   if (orders.has(item.install_order)) fail(`Duplicate install_order: ${item.install_order}`);
   orders.add(item.install_order);
+  if (!Number.isSafeInteger(item.install_order) || item.install_order < 0) {
+    fail(`${item.id} install_order must be a nonnegative safe integer.`);
+  }
   if (!Array.isArray(item.requires)) fail(`${item.id} requires must be an array.`);
-  for (const dep of item.requires || []) {
-    if (!registry.installers.some((candidate) => candidate.id === dep)) fail(`${item.id} requires unknown dependency ${dep}`);
+  for (const dep of Array.isArray(item.requires) ? item.requires : []) {
+    const prerequisite = installersById.get(dep);
+    if (!prerequisite) {
+      fail(`${item.id} requires unknown dependency ${dep}`);
+    } else if (
+      Number.isSafeInteger(item.install_order) &&
+      Number.isSafeInteger(prerequisite.install_order) &&
+      prerequisite.install_order >= item.install_order
+    ) {
+      fail(`${item.id} requires ${dep} at an earlier install_order.`);
+    }
   }
   if (!String(item.download_url).startsWith('https://github.com/AIFreedomTrustFederation/VPS/releases/download/')) {
     fail(`${item.id} download_url must use the AIFT VPS GitHub releases path.`);

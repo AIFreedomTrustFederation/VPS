@@ -73,6 +73,8 @@ Receive → Inspect → Name → Propose → Consent → Act → Verify → Reco
 
 **Receive** accepts source, app profile, deployment intent, domain/name request, or node registration. **Inspect** reads the framework, dependencies, runtime requirements, secrets boundary, node capacity, and current route state. **Name** identifies the app, build, workload, node, domain, service record, risk, and owner. **Propose** selects a build/deployment path and eligible node. **Consent** gates production release, secret use, traffic switching, name transfer, destructive synchronization, and other high-impact actions. **Act** performs the real build, deployment, registration, or routing change. **Verify** requires health checks and actual readiness before declaring success. **Record** preserves deployment, node, service-record, disclosure, log, and rollback state. **Return** tells the operator what went live, where it runs, what evidence supports it, and what remains unresolved.
 
+The Android installer registry uses `install_order` for first-run sequencing. `npm run qa:local` checks that each prerequisite appears at a strictly earlier, nonnegative integer order, rejecting cycles and impossible dependency plans. This validates registry metadata only; it does not download or install APKs.
+
 Repository setup and verification remain explicit:
 
 ```bash
