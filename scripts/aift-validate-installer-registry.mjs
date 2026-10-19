@@ -73,8 +73,21 @@ for (const item of registry.installers) {
       fail(`${item.id} requires ${dep} at an earlier install_order.`);
     }
   }
-  if (!String(item.download_url).startsWith('https://github.com/AIFreedomTrustFederation/VPS/releases/download/')) {
-    fail(`${item.id} download_url must use the AIFT VPS GitHub releases path.`);
+  // A textual prefix is insufficient: URL normalization resolves ../ and %2e%2e
+  // segments, potentially moving the download into another repository.
+  const validAssetSegment = (value) =>
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value !== '.' &&
+    value !== '..' &&
+    !/[\/\\?#%\x00-\x1f]/.test(value);
+  if (!validAssetSegment(item.release_tag) || !validAssetSegment(item.apk_name)) {
+    fail(`${item.id} release_tag and apk_name must be valid single path segments.`);
+  } else {
+    const expectedUrl = `https://github.com/AIFreedomTrustFederation/VPS/releases/download/${encodeURIComponent(item.release_tag)}/${encodeURIComponent(item.apk_name)}`;
+    if (item.download_url !== expectedUrl) {
+      fail(`${item.id} download_url must match its AIFT VPS release_tag and apk_name exactly.`);
+    }
   }
 }
 
