@@ -75,6 +75,8 @@ Receive → Inspect → Name → Propose → Consent → Act → Verify → Reco
 
 The Android installer registry uses `install_order` for first-run sequencing. `npm run qa:local` checks that each prerequisite appears at a strictly earlier, nonnegative integer order, rejecting cycles and impossible dependency plans. This validates registry metadata only; it does not download or install APKs.
 
+The same validator now requires each `download_url` to match its declared `release_tag` and `apk_name` exactly, with safe single-segment release tags and `.apk` filenames. This rejects misleading release links and URL suffixes. It does **not** confirm that an asset exists, that its bytes match a checksum, or that the APK is signed by an expected publisher.
+
 Repository setup and verification remain explicit:
 
 ```bash

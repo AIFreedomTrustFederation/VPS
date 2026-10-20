@@ -123,3 +123,5 @@ https://github.com/AIFreedomTrustFederation/VPS/releases/download/<release_tag>/
 ```
 
 This lets users keep one bookmark/link while GitHub Actions replaces the release asset with the newest build.
+
+The registry validator requires the URL to match the declared `release_tag` and `apk_name` exactly. Release tags must be safe single path segments and filenames must be `.apk` files without directory traversal. This is a metadata consistency check only; verify asset availability, checksum, signing, and publisher provenance independently.

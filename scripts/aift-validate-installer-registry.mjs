@@ -73,8 +73,16 @@ for (const item of registry.installers) {
       fail(`${item.id} requires ${dep} at an earlier install_order.`);
     }
   }
-  if (!String(item.download_url).startsWith('https://github.com/AIFreedomTrustFederation/VPS/releases/download/')) {
-    fail(`${item.id} download_url must use the AIFT VPS GitHub releases path.`);
+  // Bind the download to the declared release and APK, not merely the release URL prefix.
+  const validTag = typeof item.release_tag === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(item.release_tag);
+  const validApk = typeof item.apk_name === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*\.apk$/.test(item.apk_name);
+  if (!validTag) fail(`${item.id} release_tag must be a safe single path segment.`);
+  if (!validApk) fail(`${item.id} apk_name must be a safe APK filename.`);
+  if (validTag && validApk && item.download_url !==
+      `https://github.com/AIFreedomTrustFederation/VPS/releases/download/${item.release_tag}/${item.apk_name}`) {
+    fail(`${item.id} download_url must match its release_tag and apk_name exactly.`);
   }
 }
 

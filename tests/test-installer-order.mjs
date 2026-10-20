@@ -20,3 +20,52 @@ test('invalid nonnumeric order fails',()=>{const r=run([item('a','first')]);asse
 test('unknown dependency still fails',()=>{const r=run([item('a',10,['missing'])]);assert.notEqual(r.status,0,r.stdout);assert.match(r.stderr,/unknown dependency/);});
 test('duplicate order still fails',()=>{const r=run([item('a',10),item('b',10)]);assert.notEqual(r.status,0,r.stdout);assert.match(r.stderr,/Duplicate install_order/);});
 test('self-dependency fails',()=>{const r=run([item('a',10,['a'])]);assert.notEqual(r.status,0,r.stdout);});
+
+// Release URLs must identify the exact APK declared by the installer entry.
+test('declared release URL remains valid', () => {
+  const r = run([item('runtime', 10)]);
+  assert.equal(r.status, 0, r.stderr);
+});
+test('download URL pointing to a different release tag fails', () => {
+  const entry = {...item('runtime', 10), release_tag: 'production'};
+  const r = run([entry]);
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /download_url/);
+});
+test('download URL pointing to a different APK fails', () => {
+  const entry = {...item('runtime', 10), apk_name: 'verified.apk'};
+  const r = run([entry]);
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /download_url/);
+});
+test('download URL with query or fragment fails', () => {
+  for (const suffix of ['?download=1', '#alternate']) {
+    const entry = {...item('runtime', 10), download_url: url + suffix};
+    const r = run([entry]);
+    assert.notEqual(r.status, 0, r.stdout);
+  }
+});
+test('release tag path traversal fails even with matching URL string', () => {
+  const tag = '../another-release';
+  const entry = {...item('runtime', 10), release_tag: tag,
+    download_url: `https://github.com/AIFreedomTrustFederation/VPS/releases/download/${tag}/app.apk`};
+  const r = run([entry]);
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /release_tag/);
+});
+test('APK path traversal fails even with matching URL string', () => {
+  const apk = '../alternate.apk';
+  const entry = {...item('runtime', 10), apk_name: apk,
+    download_url: `https://github.com/AIFreedomTrustFederation/VPS/releases/download/example/${apk}`};
+  const r = run([entry]);
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /apk_name/);
+});
+test('non-APK download name fails', () => {
+  const apk = 'install.sh';
+  const entry = {...item('runtime', 10), apk_name: apk,
+    download_url: `https://github.com/AIFreedomTrustFederation/VPS/releases/download/example/${apk}`};
+  const r = run([entry]);
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /apk_name/);
+});
