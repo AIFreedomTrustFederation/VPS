@@ -23,11 +23,33 @@ if [ -d "$NODE_DIR/.git" ]; then
   cd "$NODE_DIR"
   git pull --ff-only
 else
+  # Clone first: a failed fetch must not remove a working node directory.
+  if [ -e "$NODE_DIR" ] && [ ! -d "$NODE_DIR" ]; then
+    echo '[AIFT VPS] Node path exists but is not a directory.' >&2
+    exit 1
+  fi
+  STAGING_DIR="$(mktemp -d "${NODE_DIR}.staging.XXXXXXXX")"
+  trap 'rm -rf -- "$STAGING_DIR"' EXIT
+  if ! git clone "$REPO_URL" "$STAGING_DIR"; then
+    echo '[AIFT VPS] Clone failed. Existing node directory was not changed.' >&2
+    exit 1
+  fi
   if [ -d "$NODE_DIR" ]; then
+    if [ -e "$BACKUP_DIR" ] || [ -L "$BACKUP_DIR" ]; then
+      echo '[AIFT VPS] Backup destination already exists. Refusing to overwrite it.' >&2
+      exit 1
+    fi
     mv "$NODE_DIR" "$BACKUP_DIR"
     printf '[AIFT VPS] Backup created: %s\n' "$BACKUP_DIR"
   fi
-  git clone "$REPO_URL" "$NODE_DIR"
+  if ! mv "$STAGING_DIR" "$NODE_DIR"; then
+    echo '[AIFT VPS] Could not activate staged checkout; attempting backup restoration.' >&2
+    if [ -d "$BACKUP_DIR" ] && [ ! -e "$NODE_DIR" ]; then
+      mv "$BACKUP_DIR" "$NODE_DIR" || true
+    fi
+    exit 1
+  fi
+  trap - EXIT
 fi
 
 printf '\n[AIFT VPS] Done. Next run:\n'

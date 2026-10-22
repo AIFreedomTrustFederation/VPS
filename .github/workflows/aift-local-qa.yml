@@ -39,6 +39,10 @@
           "run": "npm run qa:local"
         },
         {
+          "name": "Verify node refresh failure safety",
+          "run": "python3 tests/test-git-refresh.py"
+        },
+        {
           "name": "Verify clean checkout",
           "run": "test -z \"$(git status --porcelain)\""
         }

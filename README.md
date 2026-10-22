@@ -85,6 +85,14 @@ npm run qa:local
 npm run dashboard:build
 ```
 
+The node refresh helper, `bash scripts/aift-git-refresh.sh`, stages a replacement
+clone before moving a preexisting non-Git node directory to a timestamped
+backup. If cloning fails, the original node directory remains in place.
+Existing Git checkouts still use `git pull --ff-only`. This helper refreshes
+source files; it does not verify a running deployment. Run
+`python3 tests/test-git-refresh.py` (Python 3, Git, and Bash required) to
+exercise the failure-preservation and successful-refresh regressions.
+
 Common development surfaces include:
 
 ```bash
