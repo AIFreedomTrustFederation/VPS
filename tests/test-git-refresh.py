@@ -71,6 +71,28 @@ class RefreshTests(unittest.TestCase):
         self.assertTrue((self.node / '.git').is_dir())
         self.assertFalse(list(self.root.glob('node with spaces-backup-*')))
 
+    def test_explicit_remote_mismatch_refuses_refresh(self):
+        self.make_remote()
+        git('clone', self.remote, self.node)
+        other = self.root / 'different-origin.git'
+        git('init', '--bare', other)
+        head_before = git('rev-parse', 'HEAD', cwd=self.node).stdout.strip()
+        result = self.run_refresh(other)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('does not match', result.stderr)
+        self.assertEqual(git('rev-parse', 'HEAD', cwd=self.node).stdout.strip(), head_before)
+        self.assertEqual(git('remote', 'get-url', 'origin', cwd=self.node).stdout.strip(), str(self.remote))
+
+    def test_implicit_url_preserves_existing_origin(self):
+        self.make_remote()
+        git('clone', self.remote, self.node)
+        env = os.environ.copy()
+        env.pop('AIFT_REPO_URL', None)
+        env['AIFT_NODE_DIR'] = str(self.node)
+        result = subprocess.run(['bash', str(SCRIPT)], env=env, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_existing_git_checkout_fast_forward(self):
         seed = self.make_remote()
         git('clone', self.remote, self.node)

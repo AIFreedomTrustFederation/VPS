@@ -88,7 +88,11 @@ npm run dashboard:build
 The node refresh helper, `bash scripts/aift-git-refresh.sh`, stages a replacement
 clone before moving a preexisting non-Git node directory to a timestamped
 backup. If cloning fails, the original node directory remains in place.
-Existing Git checkouts still use `git pull --ff-only`. This helper refreshes
+Existing Git checkouts still use `git pull --ff-only` against their configured
+`origin`. When `AIFT_REPO_URL` is explicitly set, the helper refuses to pull if
+the existing checkout's `origin` URL differs; it does not silently switch
+repositories or rewrite remotes. Without that override, existing checkouts
+retain their configured `origin` (including SSH remotes). This helper refreshes
 source files; it does not verify a running deployment. Run
 `python3 tests/test-git-refresh.py` (Python 3, Git, and Bash required) to
 exercise the failure-preservation and successful-refresh regressions.

@@ -21,6 +21,15 @@ fi
 
 if [ -d "$NODE_DIR/.git" ]; then
   cd "$NODE_DIR"
+  ORIGIN_URL="$(git remote get-url origin)" || {
+    echo '[AIFT VPS] Existing checkout has no usable origin remote.' >&2
+    exit 1
+  }
+  printf '[AIFT VPS] Existing checkout origin: %s\n' "$ORIGIN_URL"
+  if [ -n "${AIFT_REPO_URL:-}" ] && [ "$ORIGIN_URL" != "$REPO_URL" ]; then
+    echo '[AIFT VPS] Existing checkout origin does not match AIFT_REPO_URL; refusing to pull from another repository.' >&2
+    exit 1
+  fi
   git pull --ff-only
 else
   # Clone first: a failed fetch must not remove a working node directory.
