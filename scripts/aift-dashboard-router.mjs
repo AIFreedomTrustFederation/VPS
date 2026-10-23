@@ -19,10 +19,14 @@ function now() {
   return new Date().toISOString();
 }
 
+function validPort(port) {
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
+
 function readActive() {
   try {
     const parsed = JSON.parse(fs.readFileSync(activeFile, 'utf8'));
-    const port = Number(parsed.target_port || parsed.port || 3101);
+    const port = Number(parsed.target_port ?? parsed.port ?? 3101);
     return {
       host: '127.0.0.1',
       port,
@@ -44,7 +48,7 @@ function readActive() {
 function writeState(extra = {}) {
   const target = readActive();
   fs.writeFileSync(stateFile, JSON.stringify({
-    ok: true,
+    ok: validPort(target.port),
     service: 'aift-dashboard-router',
     listen_host: listenHost,
     listen_port: listenPort,
@@ -74,6 +78,10 @@ function sendUnavailable(res, error, target) {
 }
 
 function forwardToTarget(req, res, target) {
+  if (!validPort(target.port)) {
+    sendUnavailable(res, new Error('Active dashboard port must be an integer from 1 to 65535.'), target);
+    return;
+  }
   const headers = { ...req.headers, host: `${target.host}:${target.port}` };
   const request = http.request({
     hostname: target.host,
@@ -104,7 +112,7 @@ const server = http.createServer((req, res) => {
 
   if (req.url === '/__aift_router/status') {
     sendJson(res, 200, {
-      ok: true,
+      ok: validPort(target.port),
       service: 'aift-dashboard-router',
       listen_host: listenHost,
       listen_port: listenPort,
