@@ -93,9 +93,19 @@ source files; it does not verify a running deployment. Run
 `python3 tests/test-git-refresh.py` (Python 3, Git, and Bash required) to
 exercise the failure-preservation and successful-refresh regressions.
 
+The dashboard router reads the active target from `dashboard-active.json`. An
+explicit invalid `target_port` or legacy `port` (outside 1–65535, noninteger,
+or nonnumeric) now produces HTTP 502 without terminating the router or silently
+routing to a fallback. The `/__aift_router/status` response reports `ok: false`
+for an invalid port. An `ok: true` status only confirms valid port configuration;
+it does **not** prove that the upstream is reachable or healthy. Missing or
+unreadable active-state files retain the existing fallback behavior. Run
+`node --test tests/test-dashboard-router.mjs` to check malformed targets and
+successful proxy recovery; this test does not validate production deployment.
+
 ### What the default CI run actually verifies
 
-The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, and installer regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
+The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, installer regression tests, and dashboard-router regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
 
 Common development surfaces include:
 
