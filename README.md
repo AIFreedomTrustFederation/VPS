@@ -8,7 +8,7 @@
 | Role | infrastructure, nodes, deployment, relay, and server systems |
 | Workspace | `AIFT/VPS` |
 | Control plane | AIFT workspace / AIFT-OS |
-| Verification | lint, typecheck, tests, and build when present |
+| Verification | `npm run qa:local` for repository metadata and installer tests; target-specific builds require separate checks |
 | Operating standards | local-first, inspectable, sovereign by default, AI behind governed provider interfaces |
 
 VPS is where Federation architecture touches machines, networks, routes, deployments, and service availability. It owns the provider-node and deployment problem: how an application moves from source to a real runtime, how a node proves health, how traffic reaches a healthy deployment, how names and service records remain portable, and how infrastructure tells the truth about where a service actually runs.
@@ -92,6 +92,10 @@ Existing Git checkouts still use `git pull --ff-only`. This helper refreshes
 source files; it does not verify a running deployment. Run
 `python3 tests/test-git-refresh.py` (Python 3, Git, and Bash required) to
 exercise the failure-preservation and successful-refresh regressions.
+
+### What the default CI run actually verifies
+
+The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, and installer regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
 
 Common development surfaces include:
 
