@@ -44,7 +44,7 @@
         },
         {
           "name": "Verify blue/green promotion safety",
-          "run": "python3 tests/test-bluegreen-sync.py"
+          "run": "bash -n scripts/aift-bluegreen-sync.sh && python3 tests/test-bluegreen-sync.py"
         },
         {
           "name": "Verify clean checkout",
