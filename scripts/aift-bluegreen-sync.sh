@@ -146,6 +146,9 @@ if port_open "$CANDIDATE_PORT"; then
   log "Candidate port $CANDIDATE_PORT is already open. Stopping previous candidate if tracked."
   stop_pid_file "$CANDIDATE_PID_FILE" "Previous candidate"
   sleep 1
+  if port_open "$CANDIDATE_PORT"; then
+    fail "Candidate port $CANDIDATE_PORT remains occupied. Active dashboard target was not changed."
+  fi
 fi
 
 write_ready "starting" "Starting candidate dashboard on isolated port."
@@ -160,12 +163,15 @@ write_ready "health-checking" "Waiting for candidate dashboard health check."
 
 CANDIDATE_READY="0"
 for attempt in $(seq 1 90); do
-  if command -v curl >/dev/null 2>&1 && curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
-    CANDIDATE_READY="1"
-    break
-  fi
   if ! kill -0 "$CANDIDATE_PID" >/dev/null 2>&1; then
     fail "Candidate dashboard exited before health passed. See dashboard-candidate.log."
+  fi
+  if command -v curl >/dev/null 2>&1 && curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+    if ! kill -0 "$CANDIDATE_PID" >/dev/null 2>&1; then
+      fail "Candidate dashboard exited during health check. Active dashboard target was not changed."
+    fi
+    CANDIDATE_READY="1"
+    break
   fi
   log "Waiting for candidate health: attempt $attempt/90"
   sleep 1

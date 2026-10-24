@@ -103,9 +103,27 @@ unreadable active-state files retain the existing fallback behavior. Run
 `node --test tests/test-dashboard-router.mjs` to check malformed targets and
 successful proxy recovery; this test does not validate production deployment.
 
+### Blue/green candidate health and promotion
+
+`bash scripts/aift-bluegreen-sync.sh` builds a detached candidate worktree and
+promotes its port through `dashboard-active.json` only after an HTTP health
+response. The sync now fails closed if the candidate port remains occupied
+after attempting to stop a previously tracked candidate, or if the newly
+spawned candidate process exits before or during the health probe. In these
+cases, the existing active-target file is not rewritten. Run
+`python3 tests/test-bluegreen-sync.py` (Python 3, Git, Bash, and curl required)
+for isolated real-Git regressions covering an unrelated listener, an exited
+candidate, and a live candidate. These tests use temporary local Git remotes
+and stubbed build commands; they do not deploy a real Next.js dashboard.
+
+A passing PID check plus HTTP 200 is a limited readiness signal, not
+cryptographic service identity, a full end-to-end router test, or a guarantee
+against concurrent port replacement. Inspect the candidate logs and actual
+public router health before treating a production promotion as verified.
+
 ### What the default CI run actually verifies
 
-The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, installer regression tests, and dashboard-router regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
+The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, installer regression tests, and dashboard-router regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), runs the [blue/green promotion regressions](tests/test-bluegreen-sync.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
 
 ### Dashboard build and deployment evidence
 
