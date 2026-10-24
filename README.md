@@ -131,6 +131,15 @@ The [AIFT Auto Pipeline](.github/workflows/aift-auto-pipeline.yml) is separate f
 
 When deployment credentials are present, the pipeline runs a remote Git update, `docker compose up -d --build`, and `docker compose ps`. It does not perform an HTTP health check or verify external routing after those steps. Confirm the actual deployment-job steps, running container health, and externally reachable service separately. The [manual dashboard deployment workflow](.github/workflows/deploy-aift-dashboard.yml) is a distinct, manually triggered path and must be evaluated independently.
 
+
+### Manual dashboard deployment: bootstrap state and credential boundary
+
+The [manual dashboard deployment workflow](.github/workflows/deploy-aift-dashboard.yml) is `workflow_dispatch`-only. It builds the dashboard on the runner, then uses SSH to clone or update the remote checkout and run `docker compose up -d --build` and `docker compose ps`. Unlike the auto pipeline, it has no preliminary credential-presence gate. It does not probe the remote HTTP endpoint, verify public routing, or perform rollback. On first setup, it writes an `apps.yml` entry with `status: running` **before** verifying that a dashboard process is healthy; this is seeded registry data, not measured service status.
+
+The [dashboard Compose file](apps/aift-dashboard/compose.yml) supplies publicly documented placeholder defaults for `AIFT_DASHBOARD_TOKEN` and `AIFT_NODE_TOKEN` when the remote Compose environment does not provide real values. The workflow does not provision those tokens. The [API authentication handler](apps/aift-dashboard/lib/auth.ts) and [node heartbeat handler](apps/aift-dashboard/app/api/nodes/heartbeat/route.ts) compare bearer tokens with the configured values, so deploying with placeholders is unsafe. The [health checks](apps/aift-dashboard/lib/health.ts) check token **presence**, not token strength, and registry-file existence, not actual deployment readiness.
+
+Before using this path on a real host, configure unique credentials outside source control, verify the SSH host key independently (the workflow currently populates `known_hosts` with `ssh-keyscan`), inspect container logs, test the deployed health and authenticated endpoints, and verify external routing. The non-root deployment and rollback protections required by the [security baseline](docs/security-baseline.md) are not enforced by this workflow.
+
 Common development surfaces include:
 
 ```bash
