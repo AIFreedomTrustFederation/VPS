@@ -85,6 +85,25 @@ npm run qa:local
 npm run dashboard:build
 ```
 
+### Node heartbeat metadata integrity
+
+`bash scripts/aift-heartbeat.sh` writes a local JSON heartbeat to
+`$AIFT_HOME/heartbeats/$NODE_NAME.json`. The script requires Bash and
+Node.js; `curl` is optional for its local HTTP health probe. It now rejects
+node identifiers that are not single alphanumeric-leading filename components
+and ports outside canonical decimal 1–65535 **before** creating directories.
+It serializes display names and node classes as JSON strings, so quotes,
+backslashes, Unicode, and line breaks cannot corrupt or inject heartbeat fields.
+Run `bash -n scripts/aift-heartbeat.sh && python3 tests/test-heartbeat.py`
+(Python 3 is required for the regression tests). Hosted local QA runs these
+tests with stubbed curl responses and checks that a failed probe reports
+`warning`.
+
+This validates the generated local metadata, **not** the identity of the
+process responding on the port, remote reachability, signed node identity,
+or successful provider enrollment. The separate `aift-node-card.sh` export
+and import formats are not covered by this heartbeat validation.
+
 The node refresh helper, `bash scripts/aift-git-refresh.sh`, stages a replacement
 clone before moving a preexisting non-Git node directory to a timestamped
 backup. If cloning fails, the original node directory remains in place.
@@ -123,7 +142,7 @@ public router health before treating a production promotion as verified.
 
 ### What the default CI run actually verifies
 
-The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, installer regression tests, and dashboard-router regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), runs the [blue/green promotion regressions](tests/test-bluegreen-sync.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
+The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, installer regression tests, and dashboard-router regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), runs the [blue/green promotion regressions](tests/test-bluegreen-sync.py), runs the [heartbeat metadata regressions](tests/test-heartbeat.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
 
 ### Dashboard build and deployment evidence
 
