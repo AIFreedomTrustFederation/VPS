@@ -43,6 +43,10 @@
           "run": "python3 tests/test-git-refresh.py"
         },
         {
+          "name": "Verify blue/green promotion safety",
+          "run": "python3 tests/test-bluegreen-sync.py"
+        },
+        {
           "name": "Verify clean checkout",
           "run": "test -z \"$(git status --porcelain)\""
         }
