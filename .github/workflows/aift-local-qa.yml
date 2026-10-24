@@ -47,6 +47,10 @@
           "run": "bash -n scripts/aift-bluegreen-sync.sh && python3 tests/test-bluegreen-sync.py"
         },
         {
+          "name": "Verify heartbeat metadata integrity",
+          "run": "bash -n scripts/aift-heartbeat.sh && python3 tests/test-heartbeat.py"
+        },
+        {
           "name": "Verify clean checkout",
           "run": "test -z \"$(git status --porcelain)\""
         }
