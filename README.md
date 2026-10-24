@@ -107,6 +107,12 @@ successful proxy recovery; this test does not validate production deployment.
 
 The [AIFT Local QA workflow](.github/workflows/aift-local-qa.yml) runs on pushes to `main` and pull requests. It executes `npm run qa:local` (repository structure, source references, installer registry validation, installer regression tests, and dashboard-router regression tests), runs the [real-Git node-refresh tests](tests/test-git-refresh.py), and checks that the checkout remains clean. This is a dependency-light repository gate, **not** a complete application or deployment verification. It does not install the dashboard dependencies, build the dashboard or node agent, compile an Android APK, deploy services, authenticate release artifacts, or run a dependency-vulnerability scan. Use the target-specific commands below and inspect their separate workflow results before claiming build or release readiness.
 
+### Dashboard build and deployment evidence
+
+The [AIFT Auto Pipeline](.github/workflows/aift-auto-pipeline.yml) is separate from [AIFT Local QA](.github/workflows/aift-local-qa.yml). Its dashboard build uses temporary example registries, including an `apps.yml` entry marked `status: running`; that value is a **test fixture**, not an observation that a production service is running. On `main`, its deployment job checks for `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY`. If any are missing, the job reports that deployment was skipped and can still complete successfully. A green pipeline therefore does **not** establish that anything was deployed.
+
+When deployment credentials are present, the pipeline runs a remote Git update, `docker compose up -d --build`, and `docker compose ps`. It does not perform an HTTP health check or verify external routing after those steps. Confirm the actual deployment-job steps, running container health, and externally reachable service separately. The [manual dashboard deployment workflow](.github/workflows/deploy-aift-dashboard.yml) is a distinct, manually triggered path and must be evaluated independently.
+
 Common development surfaces include:
 
 ```bash
