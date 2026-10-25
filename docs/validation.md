@@ -21,15 +21,19 @@ Run this for docs, manifests, scripts, registry metadata, workspace wiring, and 
 npm run qa:local
 ```
 
-This runs:
+The root `qa:local` script runs these checks in sequence:
 
 ```bash
 npm run verify:structure
 npm run verify:sources
 npm run verify:installer-registry
+npm run test:installer-registry
+node --test tests/test-dashboard-router.mjs
 ```
 
-The gate intentionally avoids installing the full workspace dependency stack.
+The [hosted AIFT Local QA workflow](../.github/workflows/aift-local-qa.yml) runs that same root gate and **additionally** checks node-refresh behavior (`python3 tests/test-git-refresh.py`), blue/green promotion (`bash -n scripts/aift-bluegreen-sync.sh && python3 tests/test-bluegreen-sync.py`), heartbeat metadata (`bash -n scripts/aift-heartbeat.sh && python3 tests/test-heartbeat.py`), and a clean checkout. Those additional regressions require Python 3 and relevant shell/Git tools; they are not included in `npm run qa:local` itself.
+
+The gate intentionally avoids installing the full workspace dependency stack. Passing these checks does not establish a successful dashboard build, live node health, production deployment, or Android release.
 
 ## Dashboard Checks
 
