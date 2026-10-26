@@ -155,6 +155,10 @@ The [AIFT Auto Pipeline](.github/workflows/aift-auto-pipeline.yml) is separate f
 When deployment credentials are present, the pipeline runs a remote Git update, `docker compose up -d --build`, and `docker compose ps`. It does not perform an HTTP health check or verify external routing after those steps. Confirm the actual deployment-job steps, running container health, and externally reachable service separately. The [manual dashboard deployment workflow](.github/workflows/deploy-aift-dashboard.yml) is a distinct, manually triggered path and must be evaluated independently.
 
 
+### Dashboard deployment revision provenance
+
+Both the [auto pipeline](.github/workflows/aift-auto-pipeline.yml) and the [manual dashboard deployment](.github/workflows/deploy-aift-dashboard.yml) build from a GitHub Actions checkout, but their remote SSH deployment steps use `git pull --ff-only` instead of checking out the workflow's source commit. A successful runner build and remote `docker compose up -d --build` therefore do not establish that the deployed source matches the tested commit: the remote branch can advance independently before deployment. Neither workflow records the remote deployed commit SHA or attests the resulting container image. Before claiming a specific revision is deployed, compare the workflow's source SHA with `git rev-parse HEAD` on the host and independently verify the running container and HTTP route.
+
 ### Manual dashboard deployment: bootstrap state and credential boundary
 
 The [manual dashboard deployment workflow](.github/workflows/deploy-aift-dashboard.yml) is `workflow_dispatch`-only. It builds the dashboard on the runner, then uses SSH to clone or update the remote checkout and run `docker compose up -d --build` and `docker compose ps`. Unlike the auto pipeline, it has no preliminary credential-presence gate. It does not probe the remote HTTP endpoint, verify public routing, or perform rollback. On first setup, it writes an `apps.yml` entry with `status: running` **before** verifying that a dashboard process is healthy; this is seeded registry data, not measured service status.
