@@ -74,9 +74,9 @@ TAP APP ICON
   -> WebView opens /sync only after 3001 is alive
 ```
 
-## Next implementation step
+## Current Termux bridge and remaining verification
 
-Replace the placeholder in `AiftRuntimeManager.startRuntime()` with the first real bridge:
+`AiftRuntimeManager.startRuntime()` calls `AiftTermuxBridge.start(context)` rather than a placeholder. `scripts/aift-android-runtime-bootstrap.sh` generates the bridge class from `AiftTermuxBridge.java.template`; the bridge sends a `com.termux.RUN_COMMAND` intent for the launcher below. `AiftRuntimeManager` does not inspect the bridge's boolean result, and the activity only waits for HTTP 2xx from `127.0.0.1:3001/api/dashboard-ready` before loading `/sync`. The source therefore implements a Termux launch attempt and local readiness probe, but does not demonstrate that the intent succeeded, that the responding process is the intended runtime, or that the APK has been tested on a device.
 
 ```text
 invoke Termux-compatible AIFT launcher
