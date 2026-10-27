@@ -33,6 +33,12 @@ test('runner and Docker image install exactly the dashboard lockfile', () => {
   assert.match(buildWorkflow, /cache-dependency-path: apps\/aift-dashboard\/package-lock\.json/);
 });
 
+test('automatic pipeline enforces dashboard lockfile for its build', () => {
+  const workflow = readFileSync(join(ROOT, '.github/workflows/aift-auto-pipeline.yml'), 'utf8');
+  assert.match(workflow, /- name: Install dependencies\s+run: npm ci --workspaces=false(?:\s|$)/);
+  assert.doesNotMatch(workflow, /- name: Install dependencies\s+run: npm install(?:\s|$)/);
+});
+
 test('npm ci isolates a workspace-local lockfile without a root lockfile', () => {
   const root = mkdtempSync(join(tmpdir(), 'aift-dashboard-lock-'));
   try {
