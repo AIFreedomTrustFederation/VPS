@@ -97,5 +97,35 @@ class DashboardDeploymentRevisionTests(unittest.TestCase):
         self.assertIn("Refusing deployment", result.stderr)
 
 
+    def test_remote_tracked_modification_stops_deployment(self):
+        expected = self.git("rev-parse", "HEAD")
+        (self.repo / "revision.txt").write_text("tampered", encoding="utf-8")
+        result = self.run_guard(expected)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Refusing deployment: dirty checkout", result.stderr)
+
+    def test_remote_untracked_file_stops_deployment(self):
+        expected = self.git("rev-parse", "HEAD")
+        (self.repo / "untracked-compose-override.yml").write_text("unsafe", encoding="utf-8")
+        result = self.run_guard(expected)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Refusing deployment: dirty checkout", result.stderr)
+
+    def test_auto_pipeline_tracked_modification_stops_deployment(self):
+        expected = self.git("rev-parse", "HEAD")
+        (self.repo / "revision.txt").write_text("tampered", encoding="utf-8")
+        result = self.run_auto_guard(expected)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Refusing deployment: dirty checkout", result.stderr)
+
+    def test_auto_pipeline_untracked_file_stops_deployment(self):
+        expected = self.git("rev-parse", "HEAD")
+        (self.repo / "untracked-compose-override.yml").write_text("unsafe", encoding="utf-8")
+        result = self.run_auto_guard(expected)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Refusing deployment: dirty checkout", result.stderr)
+
+
+
 if __name__ == "__main__":
     unittest.main()

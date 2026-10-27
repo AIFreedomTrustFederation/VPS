@@ -138,6 +138,15 @@ jobs:
             echo "Refusing deployment: remote revision differs from workflow commit $DEPLOY_SHA" >&2
             exit 1
           fi
+          # Matching HEAD alone does not prove the files Docker will build are unchanged.
+          checkout_status=$(git status --porcelain --untracked-files=all) || {
+            echo "Refusing deployment: cannot inspect remote checkout" >&2
+            exit 1
+          }
+          if [ -n "$checkout_status" ]; then
+            echo "Refusing deployment: dirty checkout at verified commit" >&2
+            exit 1
+          }
           mkdir -p /opt/aift/registry /opt/aift/logs /opt/aift/secrets
           [ -f /opt/aift/registry/nodes.yml ] || cp registry-examples/nodes.yml /opt/aift/registry/nodes.yml
           [ -f /opt/aift/registry/templates.yml ] || cp registry-examples/templates.yml /opt/aift/registry/templates.yml
