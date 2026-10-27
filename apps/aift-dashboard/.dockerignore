@@ -30,3 +30,12 @@ yarn-debug.log*
 **/yarn-debug.log*
 pnpm-debug.log*
 **/pnpm-debug.log*
+# Exclude credential directories and common signing keys at any depth.
+.ssh
+**/.ssh
+.aws
+**/.aws
+.kube
+**/.kube
+*.p8
+**/*.p8

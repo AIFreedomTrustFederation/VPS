@@ -25,6 +25,8 @@ class DashboardDockerContextTests(unittest.TestCase):
             "*.pem", "**/*.pem", "*.key", "**/*.key",
             ".npmrc", "**/.npmrc", "node_modules", "**/node_modules",
             ".next", "**/.next",
+            ".ssh", "**/.ssh", ".aws", "**/.aws", ".kube", "**/.kube",
+            "*.p8", "**/*.p8",
         }
         self.assertFalse(required - patterns, f"missing exclusions: {sorted(required - patterns)}")
         self.assertFalse(any(pattern.startswith("!") for pattern in patterns),
@@ -50,6 +52,13 @@ class DashboardDockerContextTests(unittest.TestCase):
                 "node_modules/secret.js": "DO_NOT_PACKAGE=1",
                 "src/node_modules/secret.js": "DO_NOT_PACKAGE=1",
                 ".next/cache/secret": "DO_NOT_PACKAGE=1",
+                ".ssh/id_ed25519": "DO_NOT_PACKAGE=1",
+                "src/.ssh/id_rsa": "DO_NOT_PACKAGE=1",
+                ".aws/credentials": "DO_NOT_PACKAGE=1",
+                "src/.aws/credentials": "DO_NOT_PACKAGE=1",
+                ".kube/config": "DO_NOT_PACKAGE=1",
+                "src/.kube/config": "DO_NOT_PACKAGE=1",
+                "AuthKey_TEST.p8": "DO_NOT_PACKAGE=1",
             }
             for filename, value in cases.items():
                 target = context / filename
