@@ -62,5 +62,45 @@ class NodeAgentInstallerSecrets(unittest.TestCase):
         self.assert_secure(completed)
 
 
+    def run_with_overrides(self, **overrides):
+        env = dict(os.environ,
+                   AIFT_REPO_DIR=str(self.base / "repo"),
+                   AIFT_ROOT=str(self.base / "install"),
+                   AIFT_NODE_NAME="fixture-node",
+                   AIFT_CONTROL_PLANE_URL="https://example.invalid",
+                   AIFT_NODE_TOKEN=self.token)
+        env.update(overrides)
+        return subprocess.run(["bash", str(INSTALLER)], env=env, text=True,
+                              capture_output=True, timeout=15, check=False)
+
+    def test_rejects_multiline_config_before_any_install_writes(self):
+        # Newlines in .env or YAML values can introduce unintended config keys.
+        defaults = {
+            "AIFT_NODE_NAME": "fixture-node",
+            "AIFT_CONTROL_PLANE_URL": "https://example.invalid",
+            "AIFT_NODE_TOKEN": self.token,
+            "AIFT_ROOT": str(self.base / "install"),
+        }
+        for field, original in defaults.items():
+            with self.subTest(field=field):
+                completed = self.run_with_overrides(**{field: original + "\n  injected: true"})
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn("Invalid line break", completed.stderr)
+                self.assertFalse(self.target.exists())
+
+    def test_rejects_carriage_return_in_credential(self):
+        completed = self.run_with_overrides(AIFT_NODE_TOKEN="valid\rAIFT_NODE_NAME=spoofed")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("Invalid line break", completed.stderr)
+        self.assertFalse(self.target.exists())
+
+    def test_yaml_node_name_remains_quoted_scalar(self):
+        completed = self.run_with_overrides(AIFT_NODE_NAME='fixture: "quoted" # comment')
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        config = (self.target.parent / "aift.node.yml").read_text()
+        self.assertIn('  name: "fixture: \\"quoted\\" # comment"\n', config)
+        self.assertEqual(config.count("\n  trust_level:"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
