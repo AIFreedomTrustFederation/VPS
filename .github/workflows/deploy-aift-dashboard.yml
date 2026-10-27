@@ -61,7 +61,7 @@ jobs:
           if [ -n "$checkout_status" ]; then
             echo "Refusing deployment: dirty checkout at verified commit" >&2
             exit 1
-          }
+          fi
           mkdir -p /opt/aift/registry /opt/aift/logs
           [ -f /opt/aift/registry/nodes.yml ] || cp registry-examples/nodes.yml /opt/aift/registry/nodes.yml
           [ -f /opt/aift/registry/templates.yml ] || cp registry-examples/templates.yml /opt/aift/registry/templates.yml
