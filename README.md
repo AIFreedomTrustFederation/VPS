@@ -169,6 +169,8 @@ The [dashboard Compose file](apps/aift-dashboard/compose.yml) supplies publicly 
 
 Before using this path on a real host, configure unique credentials outside source control, verify the SSH host key independently (the workflow currently populates `known_hosts` with `ssh-keyscan`), inspect container logs, test the deployed health and authenticated endpoints, and verify external routing. The non-root deployment and rollback protections required by the [security baseline](docs/security-baseline.md) are not enforced by this workflow.
 
+**Dashboard Docker build-context boundary:** [The dashboard Compose file](apps/aift-dashboard/compose.yml) uses `build.context: .`, and [its Dockerfile](apps/aift-dashboard/Dockerfile) runs `COPY . .` without a dashboard-scoped `.dockerignore` on the audited default branch. Git's `.gitignore` does not filter Docker build contexts: local environment files, npm credentials, private keys, or ignored dependencies present in that directory can be sent to the Docker daemon and copied into the builder layer. No actual secret exposure was observed. Keep sensitive files out of the build context and independently verify an effective `.dockerignore` before building with local credentials. [PR #6](https://github.com/AIFreedomTrustFederation/VPS/pull/6) proposes a separately reviewed implementation repair; until merged, it is not a default-branch protection.
+
 Common development surfaces include:
 
 ```bash
