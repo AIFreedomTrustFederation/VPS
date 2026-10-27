@@ -62,5 +62,40 @@ class DashboardDeploymentRevisionTests(unittest.TestCase):
         self.assertIn("Refusing deployment", result.stderr)
 
 
+    def auto_guard(self, expected_sha):
+        workflow = (ROOT / ".github/workflows/aift-auto-pipeline.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(workflow.count(START), 1)
+        self.assertEqual(workflow.count(END), 1)
+        start = workflow.index(START)
+        end = workflow.index(END, start)
+        self.assertLess(workflow.index("git pull --ff-only"), start)
+        self.assertLess(end, workflow.index("docker compose -f compose.yml up"))
+        self.assertIn("    needs: build-dashboard", workflow)
+        return workflow[start:end].replace("${{ github.sha }}", expected_sha)
+
+    def run_auto_guard(self, expected_sha):
+        return subprocess.run(
+            ["bash", "-c", "set -euo pipefail\n" + self.auto_guard(expected_sha)],
+            cwd=self.repo, text=True, capture_output=True, check=False,
+        )
+
+    def test_auto_pipeline_matching_revision_allows_deployment(self):
+        self.assertEqual(self.run_auto_guard(self.git("rev-parse", "HEAD")).returncode, 0)
+
+    def test_auto_pipeline_remote_revision_drift_stops_deployment(self):
+        dispatched_sha = self.git("rev-parse", "HEAD")
+        self.commit("second")
+        result = self.run_auto_guard(dispatched_sha)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Refusing deployment", result.stderr)
+
+    def test_auto_pipeline_unrelated_revision_stops_deployment(self):
+        result = self.run_auto_guard("0" * 40)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Refusing deployment", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
