@@ -35,6 +35,16 @@ The [hosted AIFT Local QA workflow](../.github/workflows/aift-local-qa.yml) runs
 
 The gate intentionally avoids installing the full workspace dependency stack. Passing these checks does not establish a successful dashboard build, live node health, production deployment, or Android release.
 
+## Federation source evidence
+
+See [the integration audit and acceptance criteria](federation-evidence-integration.md).
+`python3 -B scripts/run_source_verification.py --output /tmp/aift-vps-verification.json`
+runs the source gate and Local QA regressions, tests the evidence producer, and
+writes an unsigned `aift.verification.v1` record outside the checkout. Run from a
+clean checkout; failures remain failures in both the record and the exit code.
+The separate Federation source evidence workflow tests real VPS and Runtime
+records with the pinned AIFT-OS consumer. It does not deploy services.
+
 ## Dashboard Checks
 
 When changing `apps/aift-dashboard` or dashboard-facing registry logic:
