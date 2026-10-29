@@ -12,7 +12,7 @@
     "test": "npm run qa:local",
     "lint": "npm run lint:structure",
     "lint:structure": "npm run verify:structure",
-    "qa:local": "npm run verify:structure && npm run verify:sources && npm run verify:installer-registry && npm run test:installer-registry && node --test tests/test-dashboard-router.mjs",
+    "qa:local": "npm run verify:structure && npm run verify:sources && npm run verify:installer-registry && npm run test:installer-registry && node --test tests/test-dashboard-router.mjs tests/test-dashboard-dependency-lock.mjs",
     "test:installer-registry": "node --test tests/test-installer-order.mjs",
     "verify:structure": "node scripts/aift-verify-structure.mjs",
     "verify:sources": "node scripts/aift-verify-sources.mjs",
