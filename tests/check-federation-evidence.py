@@ -47,7 +47,16 @@ def main():
     records = [json.loads(path.read_text()) for path in (args.vps_record, args.runtime_record)]
     if report["provenance"] != "unsigned_supplied_json_not_authenticated":
         raise RuntimeError("Consumer must preserve unsigned provenance")
-    for item in report["repositories"]:
+    # A partial assessment must account for both exact producer identities and
+    # checkout SHAs. Otherwise a consumer regression could silently drop a
+    # repository and make this integration test appear green.
+    entries = report.get("repositories")
+    if (not isinstance(entries, list) or len(entries) != len(expected)
+            or any(not isinstance(item, dict) for item in entries)
+            or {item.get("repository"): item.get("commit_sha") for item in entries} != expected
+            or report.get("errors", []) != []):
+        raise RuntimeError("Consumer positive report omitted or mismatched expected repository evidence")
+    for item in entries:
         if item["status"] != "reported_checks_passed_with_gaps" or not item["unverified_gates"]:
             raise RuntimeError("Consumer must preserve unchecked gates")
     assess(records[:1], 1, "failed")

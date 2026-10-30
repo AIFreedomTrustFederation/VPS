@@ -205,7 +205,9 @@ except (ValueError, KeyError, TypeError):
     records = []
 print(json.dumps({'status':'failed' if failed else 'partial',
                   'provenance':'unsigned_supplied_json_not_authenticated',
-                  'repositories':[{'status':'reported_checks_passed_with_gaps',
+                  'repositories':[{'repository':r['repository'],
+                                   'commit_sha':r['commit_sha'],
+                                   'status':'reported_checks_passed_with_gaps',
                                    'unverified_gates':['security:not_checked']} for r in records]}))
 sys.exit(1 if failed else 0)
 '''
@@ -239,6 +241,43 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             invalid = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
             self.assertIn("Consumer exited 1", invalid.stderr)
+
+
+
+    def test_bridge_rejects_partial_report_omitting_expected_repository(self):
+        # A consumer that drops Runtime but reports "partial" must not turn
+        # this cross-repository integration check green.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "omitting_consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+
+            def record(repo):
+                return {"repository": repo, "commit_sha": sha,
+                        "overall_status": "passed",
+                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}]}
+
+            vps.write_text(json.dumps(record("AIFreedomTrustFederation/VPS")))
+            runtime.write_text(json.dumps(record("AIFreedomTrustFederation/AIFT-Runtime")))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            omitted = STRICT_BRIDGE_CONSUMER.replace(
+                "for r in records]}))", "for r in records[:1]]}))"
+            )
+            self.assertNotEqual(omitted, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(omitted)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer positive report omitted", invalid.stderr)
 
 
 
