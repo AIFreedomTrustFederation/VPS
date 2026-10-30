@@ -103,6 +103,38 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(record["source"]["run_url"], "https://github.com/AIFreedomTrustFederation/VPS/actions/runs/123")
 
+    def test_atomic_publication_preserves_prior_record_on_rename_failure(self):
+        # An error after staging must never truncate or replace old evidence.
+        prior = '{"previous":"complete"}\\n'.replace("\\\\n", "\\n")
+        self.output.write_text(prior, encoding="utf-8")
+        with patch.object(evidence.os, "replace",
+                          side_effect=OSError("simulated rename failure")) as replace:
+            code, _ = self.generate()
+        self.assertEqual(code, 2)
+        replace.assert_called_once()
+        self.assertEqual(self.output.read_text(encoding="utf-8"), prior)
+        self.assertEqual(list(self.base.glob(".evidence.json.*.tmp")), [])
+
+    def test_atomic_publication_cleans_staged_file_on_fsync_failure(self):
+        prior = '{"previous":"complete"}\\n'.replace("\\\\n", "\\n")
+        self.output.write_text(prior, encoding="utf-8")
+        with patch.object(evidence.os, "fsync",
+                          side_effect=OSError("simulated fsync failure")) as fsync:
+            code, _ = self.generate()
+        self.assertEqual(code, 2)
+        fsync.assert_called_once()
+        self.assertEqual(self.output.read_text(encoding="utf-8"), prior)
+        self.assertEqual(list(self.base.glob(".evidence.json.*.tmp")), [])
+
+    def test_atomic_publication_replaces_complete_prior_record(self):
+        self.output.write_text('{"previous":"complete"}\\n'.replace("\\\\n", "\\n"),
+                               encoding="utf-8")
+        code, record = self.generate()
+        self.assertEqual(code, 0)
+        self.assertEqual(record["commit_sha"], self.sha)
+        self.assertNotIn("previous", record)
+        self.assertEqual(list(self.base.glob(".evidence.json.*.tmp")), [])
+
     def test_output_inside_checkout_rejected(self):
         self.assertEqual(evidence.generate(self.root, self.root / "evidence.json", {}), 2)
         self.assertFalse((self.root / "evidence.json").exists())
