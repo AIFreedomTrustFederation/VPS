@@ -105,7 +105,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_atomic_publication_preserves_prior_record_on_rename_failure(self):
         # An error after staging must never truncate or replace old evidence.
-        prior = '{"previous":"complete"}\\n'.replace("\\\\n", "\\n")
+        prior = '{"previous":"complete"}\n'
         self.output.write_text(prior, encoding="utf-8")
         with patch.object(evidence.os, "replace",
                           side_effect=OSError("simulated rename failure")) as replace:
@@ -116,7 +116,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(list(self.base.glob(".evidence.json.*.tmp")), [])
 
     def test_atomic_publication_cleans_staged_file_on_fsync_failure(self):
-        prior = '{"previous":"complete"}\\n'.replace("\\\\n", "\\n")
+        prior = '{"previous":"complete"}\n'
         self.output.write_text(prior, encoding="utf-8")
         with patch.object(evidence.os, "fsync",
                           side_effect=OSError("simulated fsync failure")) as fsync:
@@ -127,7 +127,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(list(self.base.glob(".evidence.json.*.tmp")), [])
 
     def test_atomic_publication_replaces_complete_prior_record(self):
-        self.output.write_text('{"previous":"complete"}\\n'.replace("\\\\n", "\\n"),
+        self.output.write_text('{"previous":"complete"}\n',
                                encoding="utf-8")
         code, record = self.generate()
         self.assertEqual(code, 0)
