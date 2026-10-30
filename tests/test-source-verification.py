@@ -103,6 +103,27 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(record["source"]["run_url"], "https://github.com/AIFreedomTrustFederation/VPS/actions/runs/123")
 
+    def test_ci_source_rejects_missing_or_invalid_identity_before_checks(self):
+        base = {"GITHUB_ACTIONS": "true", "GITHUB_SHA": self.sha,
+                "GITHUB_REPOSITORY": evidence.REPOSITORY, "GITHUB_RUN_ID": "123"}
+        for missing in ("GITHUB_SHA", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"):
+            with self.subTest(missing=missing):
+                env = dict(base)
+                del env[missing]
+                code, record = self.generate(env=env)
+                self.assertEqual(code, 2)
+                self.assertIsNone(record)
+        for invalid in ("0", "not-a-run-id", "-1"):
+            with self.subTest(invalid=invalid):
+                code, record = self.generate(env=dict(base, GITHUB_RUN_ID=invalid))
+                self.assertEqual(code, 2)
+                self.assertIsNone(record)
+
+    def test_local_source_does_not_require_ci_identity(self):
+        code, record = self.generate(env={})
+        self.assertEqual(code, 0)
+        self.assertEqual(record["source"], {"type": "local", "run_url": None})
+
     def test_atomic_publication_preserves_prior_record_on_rename_failure(self):
         # An error after staging must never truncate or replace old evidence.
         prior = '{"previous":"complete"}\n'
