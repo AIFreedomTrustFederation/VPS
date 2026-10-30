@@ -17,7 +17,6 @@ def main():
     parser.add_argument("--vps-sha", required=True)
     parser.add_argument("--runtime-sha", required=True)
     args = parser.parse_args()
-    records = [json.loads(path.read_text()) for path in (args.vps_record, args.runtime_record)]
     expected = {"AIFreedomTrustFederation/VPS": args.vps_sha,
                 "AIFreedomTrustFederation/AIFT-Runtime": args.runtime_sha}
 
@@ -27,8 +26,13 @@ def main():
             for repo, sha in expected.items():
                 command += ["--expect", f"{repo}={sha}"]
             for index, value in enumerate(values):
-                path = Path(directory) / f"{index}.json"
-                path.write_text(json.dumps(value))
+                if isinstance(value, Path):
+                    # The positive integration check must consume original
+                    # producer bytes. JSON re-encoding can erase duplicate keys.
+                    path = value
+                else:
+                    path = Path(directory) / f"{index}.json"
+                    path.write_text(json.dumps(value))
                 command += ["--input", str(path)]
             result = subprocess.run(command, capture_output=True, text=True, check=False)
         if result.returncode != expected_code:
@@ -38,7 +42,9 @@ def main():
             raise RuntimeError(f"Unexpected assessment: {report}")
         return report
 
-    report = assess(records, 0, "partial")
+    # Validate the original evidence files before creating mutated negative fixtures.
+    report = assess([args.vps_record, args.runtime_record], 0, "partial")
+    records = [json.loads(path.read_text()) for path in (args.vps_record, args.runtime_record)]
     if report["provenance"] != "unsigned_supplied_json_not_authenticated":
         raise RuntimeError("Consumer must preserve unsigned provenance")
     for item in report["repositories"]:
