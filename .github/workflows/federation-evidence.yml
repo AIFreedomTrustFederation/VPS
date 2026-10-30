@@ -47,6 +47,8 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.13'
+      - name: Test checkout commit binding guard
+        run: python -B -m unittest discover -s tests -p test_federation_checkouts.py -v
       - name: Run VPS source checks and emit evidence
         run: python -B scripts/run_source_verification.py --output "${RUNNER_TEMP}/aift-vps-verification.json"
       - name: Run Runtime source checks and emit evidence
@@ -73,8 +75,9 @@ jobs:
             ${{ runner.temp }}/aift-vps-verification.json
             ${{ runner.temp }}/aift-runtime-verification.json
           if-no-files-found: warn
-      - name: Confirm checkouts remain clean
+      - name: Confirm checkouts remain pinned and clean
         run: |
-          test -z "$(git status --porcelain)"
-          test -z "$(git -C ../aift-runtime status --porcelain)"
-          test -z "$(git -C ../aift-os status --porcelain)"
+          python -B tests/check-federation-checkouts.py \
+            --checkout ".=${GITHUB_SHA}" \
+            --checkout "../aift-runtime=b437db4b8102e6f85f5f357e3e4e16dac578528e" \
+            --checkout "../aift-os=57b482cb255b26b0fe4e81cfba7dc97caf86bf1c"
