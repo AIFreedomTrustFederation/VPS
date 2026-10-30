@@ -281,5 +281,52 @@ class BridgeOriginalBytesTests(unittest.TestCase):
 
 
 
+    def test_bridge_requires_runtime_stale_and_failed_rejection(self):
+        # The integration must fail if a consumer validates VPS correctly but
+        # silently trusts Runtime's commit or check status.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+
+            def record(repo):
+                return {"repository": repo, "commit_sha": sha,
+                        "overall_status": "passed",
+                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}]}
+
+            vps.write_text(json.dumps(record("AIFreedomTrustFederation/VPS")))
+            runtime.write_text(json.dumps(record("AIFreedomTrustFederation/AIFT-Runtime")))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            original = ("any(r['commit_sha'] != expected.get(r['repository']) or\n"
+                        "                  r['overall_status'] != 'passed' for r in records)")
+            self.assertIn(original, STRICT_BRIDGE_CONSUMER)
+            variants = {
+                "ignore_runtime_sha": (
+                    "any((r['commit_sha'] != expected.get(r['repository']) and\n"
+                    "                  r['repository'] == 'AIFreedomTrustFederation/VPS') or\n"
+                    "                  r['overall_status'] != 'passed' for r in records)"),
+                "ignore_runtime_failure": (
+                    "any(r['commit_sha'] != expected.get(r['repository']) or\n"
+                    "                  (r['overall_status'] != 'passed' and\n"
+                    "                   r['repository'] == 'AIFreedomTrustFederation/VPS') for r in records)"),
+            }
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            for scenario, replacement in variants.items():
+                with self.subTest(scenario=scenario):
+                    consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(original, replacement))
+                    invalid = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+                    self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
