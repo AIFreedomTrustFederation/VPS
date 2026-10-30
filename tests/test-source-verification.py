@@ -177,5 +177,70 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(evidence.generate(child, self.output, {}), 2)
 
 
+
+# The integration bridge must pass original producer bytes to the strict
+# consumer. Re-encoding JSON can silently erase duplicate keys.
+STRICT_BRIDGE_CONSUMER = r'''
+import argparse, json, sys
+p = argparse.ArgumentParser()
+p.add_argument('--expect', action='append', required=True)
+p.add_argument('--input', action='append', required=True)
+a = p.parse_args()
+def no_duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate key')
+        result[key] = value
+    return result
+try:
+    records = [json.load(open(path), object_pairs_hook=no_duplicates) for path in a.input]
+    expected = dict(item.split('=', 1) for item in a.expect)
+    failed = (len(records) != len(expected) or
+              {r['repository'] for r in records} != set(expected) or
+              any(r['commit_sha'] != expected.get(r['repository']) or
+                  r['overall_status'] != 'passed' for r in records))
+except (ValueError, KeyError, TypeError):
+    failed = True
+    records = []
+print(json.dumps({'status':'failed' if failed else 'partial',
+                  'provenance':'unsigned_supplied_json_not_authenticated',
+                  'repositories':[{'status':'reported_checks_passed_with_gaps',
+                                   'unverified_gates':['security:not_checked']} for r in records]}))
+sys.exit(1 if failed else 0)
+'''
+
+
+class BridgeOriginalBytesTests(unittest.TestCase):
+    def test_duplicate_key_cannot_be_erased_by_bridge(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "strict_consumer.py"
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+
+            def record(repo):
+                return {"repository": repo, "commit_sha": sha,
+                        "overall_status": "passed",
+                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}]}
+
+            vps.write_text(json.dumps(record("AIFreedomTrustFederation/VPS")))
+            runtime.write_text(json.dumps(record("AIFreedomTrustFederation/AIFT-Runtime")))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            original = vps.read_text()
+            vps.write_text(original[:-1] + ',"repository":"AIFreedomTrustFederation/VPS"}')
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer exited 1", invalid.stderr)
+
+
+
 if __name__ == "__main__":
     unittest.main()
