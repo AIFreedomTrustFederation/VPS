@@ -12,6 +12,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "AIFreedomTrustFederation/VPS"
@@ -99,7 +100,24 @@ def generate(root: Path, output: Path, environ: dict | None = None) -> int:
             ],
         }
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        # Stage in the destination directory so a failed write or rename cannot
+        # truncate a previously published verification record. This is atomic
+        # per file, not a durable transaction across files or directories.
+        payload = json.dumps(record, indent=2, sort_keys=True) + "\n"
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=output.parent,
+                prefix=f".{output.name}.", suffix=".tmp", delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, output)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         print(f"VPS verification evidence: {output} ({record['overall_status']})")
         return 0 if passed else 1
     except (OSError, ValueError, subprocess.SubprocessError) as error:
