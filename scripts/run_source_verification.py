@@ -73,16 +73,22 @@ def generate(root: Path, output: Path, environ: dict | None = None) -> int:
             raise ValueError("GITHUB_SHA does not match checkout commit")
         if env.get("GITHUB_REPOSITORY") and env["GITHUB_REPOSITORY"] != REPOSITORY:
             raise ValueError("GITHUB_REPOSITORY does not match VPS")
+        source = "github-actions" if env.get("GITHUB_ACTIONS") == "true" else "local"
+        run_id = env.get("GITHUB_RUN_ID", "")
+        if source == "github-actions" and (
+            env.get("GITHUB_SHA") != sha
+            or env.get("GITHUB_REPOSITORY") != REPOSITORY
+            or not re.fullmatch(r"[1-9][0-9]*", run_id)
+        ):
+            raise ValueError("GitHub Actions evidence requires matching SHA, repository and run ID")
 
         before = checkout_clean(root, sha)
         checks = [run_check(check_id, command, root) for check_id, command in CHECKS]
         clean = checkout_clean(root, sha) and before
         checks.append({"id": "worktree", "command": "git status and HEAD (before and after)",
                        "status": "passed" if clean else "failed", "exit_code": 0 if clean else 1})
-        source = "github-actions" if env.get("GITHUB_ACTIONS") == "true" else "local"
-        run_id = env.get("GITHUB_RUN_ID", "")
         run_url = (f"https://github.com/{REPOSITORY}/actions/runs/{run_id}"
-                   if source == "github-actions" and re.fullmatch(r"[1-9][0-9]*", run_id) else None)
+                   if source == "github-actions" else None)
         passed = all(check["status"] == "passed" for check in checks)
         record = {
             "schema": "aift.verification.v1", "repository": REPOSITORY,
