@@ -67,7 +67,16 @@ def main():
     failed[0]["checks"][0].update(status="failed", exit_code=7)
     failed[0]["overall_status"] = "failed"
     assess(failed, 1, "failed")
-    print("Federation evidence integration: passed, missing, stale and failed records checked.")
+    # Exercise Runtime independently: a consumer must not silently trust the
+    # second producer while correctly rejecting only VPS corruption.
+    stale_runtime = json.loads(json.dumps(records))
+    stale_runtime[1]["commit_sha"] = "0" * 40 if args.runtime_sha != "0" * 40 else "1" * 40
+    assess(stale_runtime, 1, "failed")
+    failed_runtime = json.loads(json.dumps(records))
+    failed_runtime[1]["checks"][0].update(status="failed", exit_code=7)
+    failed_runtime[1]["overall_status"] = "failed"
+    assess(failed_runtime, 1, "failed")
+    print("Federation evidence integration: VPS and Runtime passed, missing, stale and failed records checked.")
     return 0
 
 
