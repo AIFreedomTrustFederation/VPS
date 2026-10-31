@@ -499,5 +499,45 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                           invalid.stderr)
 
 
+    def test_bridge_rejects_false_authenticated_provenance_on_failure(self):
+        # A consumer may preserve unsigned provenance for successful inputs
+        # yet claim authenticated provenance for rejected inputs. The bridge
+        # must check the provenance contract on every invocation.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            marker = "'provenance':'unsigned_supplied_json_not_authenticated',"
+            self.assertIn(marker, STRICT_BRIDGE_CONSUMER)
+            mutated = STRICT_BRIDGE_CONSUMER.replace(
+                marker,
+                "'provenance':('verified_signed_attestation' if failed "
+                "else 'unsigned_supplied_json_not_authenticated'),")
+            consumer.write_text(mutated)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer assessment provenance mismatch", invalid.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
