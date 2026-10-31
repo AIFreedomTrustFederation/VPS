@@ -212,7 +212,8 @@ print(json.dumps({'status':'failed' if failed else 'partial',
                                    'commit_sha':r['commit_sha'],
                                    'status':'reported_checks_passed_with_gaps',
                                    'check_count':len(r['checks']),
-                                   'unverified_gates':['security:not_checked']} for r in records]}))
+                                   'unverified_gates':[f"{g}:{r[g]['status']}" for g in ('security','dependencies','deployment') if r[g]['status'] in ('not_checked','not_applicable')],
+                                   'failed_gates':[]} for r in records]}))
 sys.exit(1 if failed else 0)
 '''
 
@@ -230,7 +231,10 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             def record(repo):
                 return {"repository": repo, "commit_sha": sha,
                         "overall_status": "passed",
-                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}]}
+                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}],
+                        "security": {"status": "not_checked"},
+                        "dependencies": {"status": "not_checked"},
+                        "deployment": {"status": "not_applicable"}}
 
             vps.write_text(json.dumps(record("AIFreedomTrustFederation/VPS")))
             runtime.write_text(json.dumps(record("AIFreedomTrustFederation/AIFT-Runtime")))
@@ -261,7 +265,10 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             def record(repo):
                 return {"repository": repo, "commit_sha": sha,
                         "overall_status": "passed",
-                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}]}
+                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}],
+                        "security": {"status": "not_checked"},
+                        "dependencies": {"status": "not_checked"},
+                        "deployment": {"status": "not_applicable"}}
 
             vps.write_text(json.dumps(record("AIFreedomTrustFederation/VPS")))
             runtime.write_text(json.dumps(record("AIFreedomTrustFederation/AIFT-Runtime")))
@@ -300,6 +307,9 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     "repository": repo, "commit_sha": sha,
                     "overall_status": "passed",
                     "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
                 }))
             bridge = Path(__file__).with_name("check-federation-evidence.py")
             command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
@@ -331,7 +341,10 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             def record(repo):
                 return {"repository": repo, "commit_sha": sha,
                         "overall_status": "passed",
-                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}]}
+                        "checks": [{"id": "check", "status": "passed", "exit_code": 0}],
+                        "security": {"status": "not_checked"},
+                        "dependencies": {"status": "not_checked"},
+                        "deployment": {"status": "not_applicable"}}
 
             vps.write_text(json.dumps(record("AIFreedomTrustFederation/VPS")))
             runtime.write_text(json.dumps(record("AIFreedomTrustFederation/AIFT-Runtime")))
@@ -407,6 +420,41 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
 
 
+    def test_bridge_rejects_consumer_dropping_one_unverified_gate(self):
+        # A gate-blind consumer could report only two of three unchecked
+        # gates, still say "partial", and previously pass the integration.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            marker = "('security','dependencies','deployment')"
+            self.assertIn(marker, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(
+                marker, "('security','deployment')"))
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer must preserve executed check counts and unchecked gates",
+                          invalid.stderr)
 
 
 if __name__ == "__main__":

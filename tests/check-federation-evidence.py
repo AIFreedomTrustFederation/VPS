@@ -59,9 +59,21 @@ def main():
     # A consumer must account for every executed check, not merely claim that
     # the repository passed. A dropped check would otherwise be invisible.
     check_counts = {record["repository"]: len(record["checks"]) for record in records}
+    # A consumer must preserve *every* unchecked gate. Keeping just one gap
+    # would still yield "partial" while hiding other unverified boundaries.
+    expected_gaps = {
+        record["repository"]: [
+            f"{gate}:{record[gate]['status']}"
+            for gate in ("security", "dependencies", "deployment")
+            if record[gate]["status"] in ("not_checked", "not_applicable")
+        ]
+        for record in records
+    }
     for item in entries:
         if (item["status"] != "reported_checks_passed_with_gaps"
-                or not item["unverified_gates"]
+                or not expected_gaps[item["repository"]]
+                or item.get("unverified_gates") != expected_gaps[item["repository"]]
+                or item.get("failed_gates") != []
                 or type(item.get("check_count")) is not int
                 or item["check_count"] != check_counts[item["repository"]]):
             raise RuntimeError("Consumer must preserve executed check counts and unchecked gates")
