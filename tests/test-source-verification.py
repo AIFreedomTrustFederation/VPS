@@ -206,7 +206,8 @@ try:
 except (ValueError, KeyError, TypeError):
     failed = True
     records = []
-print(json.dumps({'status':'failed' if failed else 'partial',
+print(json.dumps({'schema':'aift.federation-assessment.v1',
+                  'status':'failed' if failed else 'partial',
                   'provenance':'unsigned_supplied_json_not_authenticated',
                   'repositories':[{'repository':r['repository'],
                                    'commit_sha':r['commit_sha'],
@@ -418,6 +419,47 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     invalid = subprocess.run(command, capture_output=True, text=True)
                     self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
                     self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
+
+
+    def test_bridge_requires_assessment_schema_for_both_producers(self):
+        # A consumer can return a plausible partial assessment while omitting
+        # its machine-readable schema, which breaks downstream compatibility.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            schema_field = "'schema':'aift.federation-assessment.v1',"
+            self.assertIn(schema_field, STRICT_BRIDGE_CONSUMER)
+            for variant, replacement in (
+                ("missing", ""),
+                ("wrong_version", "'schema':'aift.federation-assessment.v0',"),
+            ):
+                with self.subTest(variant=variant):
+                    consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(
+                        schema_field, replacement))
+                    invalid = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+                    self.assertIn("Consumer assessment schema mismatch", invalid.stderr)
 
 
     def test_bridge_rejects_consumer_dropping_one_unverified_gate(self):
