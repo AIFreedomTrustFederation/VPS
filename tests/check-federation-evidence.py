@@ -91,7 +91,16 @@ def main():
             "status": "failed", "reason": "Synthetic negative security evidence."
         }
         assess(failed_security, 1, "failed")
-    print("Federation evidence integration: VPS and Runtime passed, missing, stale, failed checks and failed security gates checked.")
+    # A failed dependency or deployment gate must fail the assessment even
+    # when source checks and the security gate pass.
+    for gate in ("dependencies", "deployment"):
+        for index in range(len(records)):
+            failed_gate = json.loads(json.dumps(records))
+            failed_gate[index][gate] = {
+                "status": "failed", "reason": f"Synthetic negative {gate} evidence."
+            }
+            assess(failed_gate, 1, "failed")
+    print("Federation evidence integration: VPS and Runtime passed; missing, stale, failed checks and all negative gates checked.")
     return 0
 
 

@@ -200,6 +200,8 @@ try:
               {r['repository'] for r in records} != set(expected) or
               any(r['commit_sha'] != expected.get(r['repository']) or
                   r['overall_status'] != 'passed' for r in records) or
+              any(r.get('dependencies', {}).get('status') == 'failed' for r in records) or
+              any(r.get('deployment', {}).get('status') == 'failed' for r in records) or
               any(r.get('security', {}).get('status') == 'failed' for r in records))
 except (ValueError, KeyError, TypeError):
     failed = True
@@ -361,9 +363,9 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
 
 
-    def test_bridge_rejects_consumer_ignoring_failed_security_gate(self):
-        # A gate-blind consumer must fail the integration test even when all
-        # producer command checks and both repository identities are valid.
+    def test_bridge_rejects_consumer_ignoring_any_failed_gate(self):
+        # The bridge must reject consumers that silently ignore any of the
+        # three independent evidence gates for either producer.
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             consumer = base / "consumer.py"
@@ -377,6 +379,8 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     "overall_status": "passed",
                     "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
                     "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
                 }))
             bridge = Path(__file__).with_name("check-federation-evidence.py")
             command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
@@ -386,13 +390,21 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             valid = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(valid.returncode, 0, valid.stderr)
 
-            gate_guard = (" or\n              any(r.get('security', {}).get('status') "
-                          "== 'failed' for r in records)")
-            self.assertIn(gate_guard, STRICT_BRIDGE_CONSUMER)
-            consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(gate_guard, ""))
-            invalid = subprocess.run(command, capture_output=True, text=True)
-            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
-            self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
+            gate_guards = {
+                "dependencies": ("any(r.get('dependencies', {}).get('status') "
+                                 "== 'failed' for r in records) or\n              "),
+                "deployment": ("any(r.get('deployment', {}).get('status') "
+                               "== 'failed' for r in records) or\n              "),
+                "security": (" or\n              any(r.get('security', {}).get('status') "
+                             "== 'failed' for r in records)"),
+            }
+            for gate, guard in gate_guards.items():
+                with self.subTest(gate=gate):
+                    self.assertIn(guard, STRICT_BRIDGE_CONSUMER)
+                    consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(guard, ""))
+                    invalid = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+                    self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
 
 
 
