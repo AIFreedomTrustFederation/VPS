@@ -82,7 +82,16 @@ def main():
     failed_runtime[1]["checks"][0].update(status="failed", exit_code=7)
     failed_runtime[1]["overall_status"] = "failed"
     assess(failed_runtime, 1, "failed")
-    print("Federation evidence integration: VPS and Runtime passed, missing, stale and failed records checked.")
+    # A successful source-check exit code must never mask a failed security
+    # gate from either producer. This protects the cross-repository handoff
+    # against a consumer regression that ignores negative gate evidence.
+    for index in range(len(records)):
+        failed_security = json.loads(json.dumps(records))
+        failed_security[index]["security"] = {
+            "status": "failed", "reason": "Synthetic negative security evidence."
+        }
+        assess(failed_security, 1, "failed")
+    print("Federation evidence integration: VPS and Runtime passed, missing, stale, failed checks and failed security gates checked.")
     return 0
 
 
