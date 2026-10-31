@@ -208,6 +208,7 @@ print(json.dumps({'status':'failed' if failed else 'partial',
                   'repositories':[{'repository':r['repository'],
                                    'commit_sha':r['commit_sha'],
                                    'status':'reported_checks_passed_with_gaps',
+                                   'check_count':len(r['checks']),
                                    'unverified_gates':['security:not_checked']} for r in records]}))
 sys.exit(1 if failed else 0)
 '''
@@ -279,6 +280,39 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
             self.assertIn("Consumer positive report omitted", invalid.stderr)
 
+
+
+    def test_bridge_rejects_consumer_omitting_executed_check_counts(self):
+        # A consumer that silently reports zero checks must not make a
+        # two-repository integration result look successful.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            inaccurate = STRICT_BRIDGE_CONSUMER.replace(
+                "'check_count':len(r['checks'])", "'check_count':0")
+            self.assertNotEqual(inaccurate, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(inaccurate)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer must preserve executed check counts", invalid.stderr)
 
 
     def test_bridge_requires_runtime_stale_and_failed_rejection(self):

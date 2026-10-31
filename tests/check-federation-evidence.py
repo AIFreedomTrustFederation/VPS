@@ -56,9 +56,15 @@ def main():
             or {item.get("repository"): item.get("commit_sha") for item in entries} != expected
             or report.get("errors", []) != []):
         raise RuntimeError("Consumer positive report omitted or mismatched expected repository evidence")
+    # A consumer must account for every executed check, not merely claim that
+    # the repository passed. A dropped check would otherwise be invisible.
+    check_counts = {record["repository"]: len(record["checks"]) for record in records}
     for item in entries:
-        if item["status"] != "reported_checks_passed_with_gaps" or not item["unverified_gates"]:
-            raise RuntimeError("Consumer must preserve unchecked gates")
+        if (item["status"] != "reported_checks_passed_with_gaps"
+                or not item["unverified_gates"]
+                or type(item.get("check_count")) is not int
+                or item["check_count"] != check_counts[item["repository"]]):
+            raise RuntimeError("Consumer must preserve executed check counts and unchecked gates")
     assess(records[:1], 1, "failed")
     stale = json.loads(json.dumps(records))
     stale[0]["commit_sha"] = "0" * 40 if args.vps_sha != "0" * 40 else "1" * 40
