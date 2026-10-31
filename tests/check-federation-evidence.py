@@ -40,6 +40,11 @@ def main():
         report = json.loads(result.stdout)
         if report.get("schema") != "aift.federation-assessment.v1":
             raise RuntimeError("Consumer assessment schema mismatch")
+        # Every assessment, including rejected evidence, must retain the
+        # explicit unsigned provenance boundary. A failure must not be
+        # rebranded as authenticated evidence by a consumer regression.
+        if report.get("provenance") != "unsigned_supplied_json_not_authenticated":
+            raise RuntimeError("Consumer assessment provenance mismatch")
         if report["status"] != expected_status:
             raise RuntimeError(f"Unexpected assessment: {report}")
         return report
