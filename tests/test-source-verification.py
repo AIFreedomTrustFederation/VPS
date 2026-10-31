@@ -199,7 +199,8 @@ try:
     failed = (len(records) != len(expected) or
               {r['repository'] for r in records} != set(expected) or
               any(r['commit_sha'] != expected.get(r['repository']) or
-                  r['overall_status'] != 'passed' for r in records))
+                  r['overall_status'] != 'passed' for r in records) or
+              any(r.get('security', {}).get('status') == 'failed' for r in records))
 except (ValueError, KeyError, TypeError):
     failed = True
     records = []
