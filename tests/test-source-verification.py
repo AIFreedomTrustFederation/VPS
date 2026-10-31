@@ -550,14 +550,14 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             consumer = root / "sleeping_consumer.py"
-            consumer.write_text("import time\\ntime.sleep(5)\\n".replace("\\\\n", "\\n"))
+            consumer.write_text("import time\ntime.sleep(5)\n")
             args = [str(bridge_path), "--consumer", str(consumer),
                     "--vps-record", str(root / "vps.json"),
                     "--runtime-record", str(root / "runtime.json"),
                     "--vps-sha", "a" * 40, "--runtime-sha", "b" * 40]
             with patch.object(sys, "argv", args), patch.object(
                     bridge, "CONSUMER_TIMEOUT_SECONDS", 0.1):
-                with self.assertRaisesRegex(RuntimeError, r"Consumer timed out after 0\\.1 seconds"):
+                with self.assertRaisesRegex(RuntimeError, r"Consumer timed out after 0\.1 seconds"):
                     bridge.main()
 
 
