@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 
+CONSUMER_TIMEOUT_SECONDS = 60
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -34,7 +36,13 @@ def main():
                     path = Path(directory) / f"{index}.json"
                     path.write_text(json.dumps(value))
                 command += ["--input", str(path)]
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            try:
+                result = subprocess.run(command, capture_output=True, text=True,
+                                        check=False, timeout=CONSUMER_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds"
+                ) from exc
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
         report = json.loads(result.stdout)
