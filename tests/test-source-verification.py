@@ -361,6 +361,40 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
 
 
+    def test_bridge_rejects_consumer_ignoring_failed_security_gate(self):
+        # A gate-blind consumer must fail the integration test even when all
+        # producer command checks and both repository identities are valid.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            gate_guard = (" or\n              any(r.get('security', {}).get('status') "
+                          "== 'failed' for r in records)")
+            self.assertIn(gate_guard, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(gate_guard, ""))
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
+
+
 
 
 if __name__ == "__main__":
