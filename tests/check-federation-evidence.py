@@ -38,6 +38,8 @@ def main():
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
         report = json.loads(result.stdout)
+        if report.get("schema") != "aift.federation-assessment.v1":
+            raise RuntimeError("Consumer assessment schema mismatch")
         if report["status"] != expected_status:
             raise RuntimeError(f"Unexpected assessment: {report}")
         return report
