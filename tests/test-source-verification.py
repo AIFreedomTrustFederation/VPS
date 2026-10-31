@@ -539,5 +539,27 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             self.assertIn("Consumer assessment provenance mismatch", invalid.stderr)
 
 
+
+class BridgeConsumerTimeoutTests(unittest.TestCase):
+    def test_hung_consumer_fails_closed_without_waiting_for_job_timeout(self):
+        # Exercise a real sleeping subprocess, not a mocked return code.
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        spec = importlib.util.spec_from_file_location("vps_federation_bridge_timeout", bridge_path)
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            consumer = root / "sleeping_consumer.py"
+            consumer.write_text("import time\\ntime.sleep(5)\\n".replace("\\\\n", "\\n"))
+            args = [str(bridge_path), "--consumer", str(consumer),
+                    "--vps-record", str(root / "vps.json"),
+                    "--runtime-record", str(root / "runtime.json"),
+                    "--vps-sha", "a" * 40, "--runtime-sha", "b" * 40]
+            with patch.object(sys, "argv", args), patch.object(
+                    bridge, "CONSUMER_TIMEOUT_SECONDS", 0.1):
+                with self.assertRaisesRegex(RuntimeError, r"Consumer timed out after 0\\.1 seconds"):
+                    bridge.main()
+
+
 if __name__ == "__main__":
     unittest.main()
