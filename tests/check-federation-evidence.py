@@ -120,18 +120,21 @@ def main():
             command = [sys.executable, "-B", str(args.consumer)]
             for repo, sha in expected.items():
                 command += ["--expect", f"{repo}={sha}"]
+            staged = []
             for index, value in enumerate(values):
-                if isinstance(value, Path):
-                    # The positive integration check must consume original
-                    # producer bytes. JSON re-encoding can erase duplicate keys.
-                    path = value
-                else:
-                    path = Path(directory) / f"{index}.json"
-                    path.write_text(json.dumps(value))
+                # Never hand original producer paths to the consumer: it must
+                # not be able to rewrite evidence before the bridge inspects it.
+                # Preserve raw producer bytes, including duplicate JSON keys.
+                path = Path(directory) / f"{index}.json"
+                raw = value if isinstance(value, bytes) else json.dumps(value).encode("utf-8")
+                path.write_bytes(raw)
+                staged.append((path, raw))
                 command += ["--input", str(path)]
             # Stream bounded output; an untrusted consumer must not exhaust
             # verifier memory before its JSON size is checked.
             result = run_consumer_bounded(command)
+            if any(path.read_bytes() != raw for path, raw in staged):
+                raise RuntimeError("Consumer modified staged evidence input")
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
         # Defense in depth: capture has already enforced this limit while
@@ -178,9 +181,18 @@ def main():
                 raise RuntimeError("Consumer negative gate attribution mismatch")
         return report
 
-    # Validate the original evidence files before creating mutated negative fixtures.
-    report = assess([args.vps_record, args.runtime_record], 0, "partial")
-    records = [json.loads(path.read_text()) for path in (args.vps_record, args.runtime_record)]
+    # Snapshot each producer record exactly once, before invoking a consumer.
+    # Both the consumer and subsequent bridge assertions use these same bytes.
+    sources = (args.vps_record, args.runtime_record)
+    original_inputs = []
+    for source in sources:
+        with source.open("rb") as stream:
+            raw = stream.read(MAX_ASSESSMENT_BYTES + 1)
+        if len(raw) > MAX_ASSESSMENT_BYTES:
+            raise RuntimeError("Producer evidence exceeds 1 MiB")
+        original_inputs.append(raw)
+    report = assess(original_inputs, 0, "partial")
+    records = [json.loads(raw) for raw in original_inputs]
     if report["provenance"] != "unsigned_supplied_json_not_authenticated":
         raise RuntimeError("Consumer must preserve unsigned provenance")
     # A partial assessment must account for both exact producer identities and
@@ -248,6 +260,12 @@ def main():
                 "status": "failed", "reason": f"Synthetic negative {gate} evidence."
             }
             assess(failed_gate, 1, "failed", (records[index]["repository"], gate))
+    # An external writer must not swap the producer files after snapshotting
+    # but before the workflow uploads those original evidence paths.
+    for source, original in zip(sources, original_inputs):
+        with source.open("rb") as stream:
+            if stream.read(MAX_ASSESSMENT_BYTES + 1) != original:
+                raise RuntimeError("Producer evidence changed during verification")
     print("Federation evidence integration: VPS and Runtime passed; missing, stale, failed checks and all negative gates checked.")
     return 0
 
