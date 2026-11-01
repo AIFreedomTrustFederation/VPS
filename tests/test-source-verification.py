@@ -480,6 +480,52 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
 
 
+    def test_bridge_rejects_duplicate_consumer_assessment_keys(self):
+        # Python's default JSON parser accepts duplicate keys and keeps the
+        # last value. An ambiguous assessment must not pass the bridge.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            # Prefix a conflicting schema key, leaving the valid schema last.
+            # Without strict duplicate detection, json.loads silently accepts
+            # the later schema and all other bridge assertions still pass.
+            start = "print(json.dumps({'schema':'aift.federation-assessment.v1',"
+            end = "for r in records]}))"
+            self.assertIn(start, STRICT_BRIDGE_CONSUMER)
+            self.assertIn(end, STRICT_BRIDGE_CONSUMER)
+            ambiguous = STRICT_BRIDGE_CONSUMER.replace(
+                start,
+                "print('{\\\"schema\\\":\\\"aift.federation-assessment.v0\\\",' + json.dumps({'schema':'aift.federation-assessment.v1',",
+                1,
+            ).replace(end, "for r in records]})[1:]", 1)
+            consumer.write_text(ambiguous)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer assessment contains duplicate JSON key: schema",
+                          invalid.stderr)
+
+
     def test_bridge_requires_assessment_schema_for_both_producers(self):
         # A consumer can return a plausible partial assessment while omitting
         # its machine-readable schema, which breaks downstream compatibility.
