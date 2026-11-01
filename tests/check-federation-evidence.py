@@ -5,14 +5,17 @@ import argparse
 import json
 import math
 import os
+import selectors
 from pathlib import Path
 import signal
 import subprocess
 import sys
+import time
 import tempfile
 
 CONSUMER_TIMEOUT_SECONDS = 60
 MAX_ASSESSMENT_BYTES = 1024 * 1024
+MAX_CONSUMER_STDERR_BYTES = 64 * 1024
 
 
 def reject_duplicate_assessment_keys(pairs):
@@ -35,6 +38,58 @@ def finite_assessment_float(value):
     if not math.isfinite(number):
         reject_nonfinite_assessment(value)
     return number
+
+
+
+def run_consumer_bounded(command):
+    """Drain consumer pipes incrementally with bounded memory and a deadline."""
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=True)
+    stdout = bytearray()
+    stderr = bytearray()
+    deadline = time.monotonic() + CONSUMER_TIMEOUT_SECONDS
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+            selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(
+                        f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds")
+                for key, _ in selector.select(timeout=remaining):
+                    chunk = os.read(key.fileobj.fileno(), 65536)
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    if key.data == "stdout":
+                        if len(stdout) + len(chunk) > MAX_ASSESSMENT_BYTES:
+                            raise RuntimeError("Consumer assessment exceeds 1 MiB")
+                        stdout.extend(chunk)
+                    elif len(stderr) < MAX_CONSUMER_STDERR_BYTES:
+                        stderr.extend(chunk[:MAX_CONSUMER_STDERR_BYTES - len(stderr)])
+            try:
+                process.wait(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds") from exc
+        try:
+            decoded_stdout = stdout.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError("Consumer assessment contains invalid UTF-8") from exc
+        return subprocess.CompletedProcess(
+            command, process.returncode, decoded_stdout,
+            stderr.decode("utf-8", errors="replace"))
+    finally:
+        # Also terminate descendants of a consumer that already exited.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=5)
+        process.stdout.close()
+        process.stderr.close()
 
 
 def main():
@@ -62,36 +117,13 @@ def main():
                     path = Path(directory) / f"{index}.json"
                     path.write_text(json.dumps(value))
                 command += ["--input", str(path)]
-            # A timed-out consumer may have spawned descendants that inherited
-            # stdout/stderr. Kill its entire process group, not just its leader.
-            # This integration runner executes on Linux in GitHub Actions.
-            process = subprocess.Popen(
-                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, start_new_session=True)
-            timed_out = False
-            try:
-                stdout, stderr = process.communicate(timeout=CONSUMER_TIMEOUT_SECONDS)
-            except subprocess.TimeoutExpired as exc:
-                timed_out = True
-                raise RuntimeError(
-                    f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds"
-                ) from exc
-            finally:
-                # A consumer may exit successfully but leave background
-                # descendants with closed stdout/stderr. Always terminate
-                # its process group before inspecting or publishing evidence.
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass  # No processes remain in the consumer's group.
-                if timed_out or process.poll() is None:
-                    process.communicate(timeout=5)
-            result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+            # Stream bounded output; an untrusted consumer must not exhaust
+            # verifier memory before its JSON size is checked.
+            result = run_consumer_bounded(command)
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
-        # Bound accepted assessment bytes before parsing. communicate() still
-        # buffers stdout, so this is a parsing/contract limit rather than a
-        # process-memory limit; the process timeout remains independent.
+        # Defense in depth: capture has already enforced this limit while
+        # draining the consumer, before any JSON parsing or decoding.
         if len(result.stdout.encode("utf-8")) > MAX_ASSESSMENT_BYTES:
             raise RuntimeError("Consumer assessment exceeds 1 MiB")
         try:
