@@ -658,5 +658,54 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
             self.assertFalse(marker.exists(), "Timed-out consumer left a live descendant")
 
 
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-group cleanup")
+    def test_successful_consumer_kills_closed_pipe_descendants(self):
+        # A consumer may exit 0 and close its pipes while a background child
+        # remains alive. Successful integration must not leave that child
+        # free to mutate checkout or evidence after assessment.
+        import time
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            marker = root / "late-consumer-descendant"
+            ready = root / "consumer-descendant-spawned"
+            consumer = root / "consumer.py"
+            descendant = (
+                "import time; from pathlib import Path; "
+                f"time.sleep(3); Path({str(marker)!r}).write_text('escaped')"
+            )
+            consumer.write_text(
+                "import subprocess, sys\n"
+                f"subprocess.Popen([sys.executable, '-B', '-c', {descendant!r}], "
+                "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+                "stderr=subprocess.DEVNULL)\n"
+                f"from pathlib import Path; Path({str(ready)!r}).write_text('spawned')\n"
+                + STRICT_BRIDGE_CONSUMER
+            )
+            sha = "a" * 40
+            vps = root / "vps.json"
+            runtime = root / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            command = [sys.executable, "-B", str(bridge_path),
+                       "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(ready.exists(), "Consumer fixture did not spawn a child")
+            time.sleep(3.5)
+            self.assertFalse(marker.exists(), "Successful consumer left a live descendant")
+
+
 if __name__ == "__main__":
     unittest.main()
