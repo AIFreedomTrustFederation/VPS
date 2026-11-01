@@ -791,6 +791,39 @@ class BridgeStrictJsonTests(unittest.TestCase):
                     self.assertIn(expected_error, result.stderr)
 
 
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "POSIX consumer capture")
+class BridgeBoundedCaptureTests(unittest.TestCase):
+    def setUp(self):
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        spec = importlib.util.spec_from_file_location(
+            "vps_federation_bridge_bounded_capture", bridge_path)
+        self.bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.bridge)
+
+    def test_oversized_stdout_aborts_before_consumer_finishes(self):
+        # An untrusted consumer can emit 2 MiB and then sleep. The bridge
+        # must stop it immediately rather than buffer all output or wait.
+        command = [sys.executable, "-B", "-c",
+                   "import sys,time; sys.stdout.write('x'*(2*1024*1024)); "
+                   "sys.stdout.flush(); time.sleep(12)"]
+        started = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, "Consumer assessment exceeds 1 MiB"):
+            self.bridge.run_consumer_bounded(command)
+        self.assertLess(time.monotonic() - started, 8)
+
+    def test_large_stderr_is_drained_but_bounded(self):
+        # A noisy consumer must not deadlock on stderr or exhaust memory.
+        command = [sys.executable, "-B", "-c",
+                   "import sys; sys.stderr.write('z'*(2*1024*1024)); "
+                   "sys.stdout.write('{}')"]
+        result = self.bridge.run_consumer_bounded(command)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "{}")
+        self.assertEqual(len(result.stderr.encode("utf-8")),
+                         self.bridge.MAX_CONSUMER_STDERR_BYTES)
+
+
 class BridgeConsumerTimeoutTests(unittest.TestCase):
     def test_hung_consumer_fails_closed_without_waiting_for_job_timeout(self):
         # Exercise a real sleeping subprocess, not a mocked return code.
