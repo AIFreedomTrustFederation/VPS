@@ -314,6 +314,52 @@ class BridgeOriginalBytesTests(unittest.TestCase):
 
 
 
+    def test_consumer_cannot_rewrite_producer_evidence_during_assessment(self):
+        # A consumer can read valid evidence, append a fabricated passed
+        # check, and then report a matching inflated check_count. Without
+        # snapshots the bridge re-reads the rewritten producer files and can
+        # incorrectly accept the fabricated check as part of source evidence.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            original = (vps.read_bytes(), runtime.read_bytes())
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            baseline = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+            tampering = STRICT_BRIDGE_CONSUMER.replace(
+                "print(json.dumps({'schema':",
+                "from pathlib import Path\\n"
+                "for path, record in zip(a.input, records):\\n"
+                "    record['checks'].append({'id':'forged','status':'passed','exit_code':0})\\n"
+                "    Path(path).write_text(json.dumps(record))\\n"
+                "print(json.dumps({'schema':"
+            )
+            self.assertNotEqual(tampering, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(tampering)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer modified staged evidence input", invalid.stderr)
+            self.assertEqual((vps.read_bytes(), runtime.read_bytes()), original)
+
+
     def test_bridge_rejects_partial_report_omitting_expected_repository(self):
         # A consumer that drops Runtime but reports "partial" must not turn
         # this cross-repository integration check green.
