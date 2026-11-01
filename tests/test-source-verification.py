@@ -561,5 +561,43 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
                     bridge.main()
 
 
+    def test_timed_out_consumer_kills_inherited_pipe_descendant(self):
+        # subprocess.run(timeout=...) kills only the immediate child. A child
+        # that spawns a writer inheriting the pipes can survive a timed-out
+        # assessment and modify state after the bridge has reported failure.
+        import time
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        spec = importlib.util.spec_from_file_location("vps_federation_bridge_group", bridge_path)
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            marker = root / "descendant-survived"
+            spawned = root / "descendant-pid"
+            consumer = root / "spawning_consumer.py"
+            descendant = (
+                "from pathlib import Path; import time; time.sleep(1.5); "
+                f"Path({str(marker)!r}).write_text('survived')"
+            )
+            consumer.write_text(
+                "import subprocess, sys, time\n"
+                f"child = subprocess.Popen([sys.executable, '-c', {descendant!r}], "
+                "stdout=sys.stdout, stderr=sys.stderr)\n"
+                f"from pathlib import Path; Path({str(spawned)!r}).write_text(str(child.pid))\n"
+                "time.sleep(15)\n"
+            )
+            args = [str(bridge_path), "--consumer", str(consumer),
+                    "--vps-record", str(root / "vps.json"),
+                    "--runtime-record", str(root / "runtime.json"),
+                    "--vps-sha", "a" * 40, "--runtime-sha", "b" * 40]
+            with patch.object(sys, "argv", args), patch.object(
+                    bridge, "CONSUMER_TIMEOUT_SECONDS", 2):
+                with self.assertRaisesRegex(RuntimeError, "Consumer timed out after 2 seconds"):
+                    bridge.main()
+            self.assertTrue(spawned.exists(), "Timeout fixture did not spawn a descendant")
+            time.sleep(5)
+            self.assertFalse(marker.exists(), "Timed-out consumer left a live descendant")
+
+
 if __name__ == "__main__":
     unittest.main()
