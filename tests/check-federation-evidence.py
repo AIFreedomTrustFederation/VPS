@@ -13,6 +13,16 @@ import tempfile
 CONSUMER_TIMEOUT_SECONDS = 60
 
 
+def reject_duplicate_assessment_keys(pairs):
+    """Reject ambiguous consumer JSON instead of accepting the last key."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise RuntimeError(f"Consumer assessment contains duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--consumer", type=Path, required=True)
@@ -65,7 +75,7 @@ def main():
             result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
-        report = json.loads(result.stdout)
+        report = json.loads(result.stdout, object_pairs_hook=reject_duplicate_assessment_keys)
         if report.get("schema") != "aift.federation-assessment.v1":
             raise RuntimeError("Consumer assessment schema mismatch")
         # Every assessment, including rejected evidence, must retain the
