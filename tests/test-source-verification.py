@@ -94,6 +94,25 @@ class EvidenceTests(unittest.TestCase):
         time.sleep(3.5)
         self.assertFalse(marker.exists(), "timed-out check left a live descendant")
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-group cleanup")
+    def test_successful_check_kills_lingering_descendant(self):
+        # A parent can exit successfully while a background child continues
+        # modifying files after the clean-checkout assertion and publication.
+        marker = self.base / "late-success-descendant"
+        ready = self.base / "success-descendant-spawned"
+        grandchild = ("import time; from pathlib import Path; "
+                      f"time.sleep(1); Path({str(marker)!r}).write_text('escaped')")
+        parent = ("import subprocess, sys; from pathlib import Path; "
+                  f"subprocess.Popen([sys.executable, '-B', '-c', {grandchild!r}]); "
+                  f"Path({str(ready)!r}).write_text('spawned')")
+        check = evidence.run_check(
+            "success_descendant", [sys.executable, "-B", "-c", parent], self.root)
+        self.assertTrue(ready.exists(), "fixture failed to start its descendant")
+        self.assertEqual(check["exit_code"], 0)
+        self.assertEqual(check["status"], "passed")
+        time.sleep(2)
+        self.assertFalse(marker.exists(), "successful check left a live descendant")
+
     def test_initial_dirty_checkout_fails_even_if_command_cleans_it(self):
         (self.root / "untracked").write_text("dirty")
         code, record = self.generate(("from pathlib import Path; Path('untracked').unlink()",))
