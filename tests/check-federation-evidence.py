@@ -8,6 +8,7 @@ import os
 import selectors
 from pathlib import Path
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -194,12 +195,20 @@ def main():
     # Both the consumer and subsequent bridge assertions use these same bytes.
     sources = (args.vps_record, args.runtime_record)
     original_inputs = []
+    original_identities = []
     for source in sources:
+        # A byte-for-byte replacement at the same pathname is still a
+        # different producer artifact. Record the filesystem identity before
+        # invoking a consumer, and do not accept symlinked producer paths.
+        identity = source.lstat()
+        if not stat.S_ISREG(identity.st_mode):
+            raise RuntimeError("Producer evidence must be a regular file")
         with source.open("rb") as stream:
             raw = stream.read(MAX_ASSESSMENT_BYTES + 1)
         if len(raw) > MAX_ASSESSMENT_BYTES:
             raise RuntimeError("Producer evidence exceeds 1 MiB")
         original_inputs.append(raw)
+        original_identities.append((identity.st_dev, identity.st_ino))
     report = assess(original_inputs, 0, "partial")
     records = [json.loads(raw) for raw in original_inputs]
     if report["provenance"] != "unsigned_supplied_json_not_authenticated":
@@ -271,10 +280,19 @@ def main():
             assess(failed_gate, 1, "failed", (records[index]["repository"], gate))
     # An external writer must not swap the producer files after snapshotting
     # but before the workflow uploads those original evidence paths.
-    for source, original in zip(sources, original_inputs):
-        with source.open("rb") as stream:
-            if stream.read(MAX_ASSESSMENT_BYTES + 1) != original:
+    for source, original, identity in zip(sources, original_inputs, original_identities):
+        # Replacing the original with identical bytes must not pass: the
+        # uploaded artifact would no longer be the one initially inspected.
+        try:
+            current = source.lstat()
+            if (not stat.S_ISREG(current.st_mode)
+                    or (current.st_dev, current.st_ino) != identity):
                 raise RuntimeError("Producer evidence changed during verification")
+            with source.open("rb") as stream:
+                if stream.read(MAX_ASSESSMENT_BYTES + 1) != original:
+                    raise RuntimeError("Producer evidence changed during verification")
+        except OSError as exc:
+            raise RuntimeError("Producer evidence changed during verification") from exc
     print("Federation evidence integration: VPS and Runtime passed; missing, stale, failed checks and all negative gates checked.")
     return 0
 
