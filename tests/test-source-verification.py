@@ -912,6 +912,10 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
         spec.loader.exec_module(bridge)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
+            # The bridge now snapshots producer bytes before launching the
+            # consumer. These fixtures only test subprocess timeout behavior.
+            for name in ("vps.json", "runtime.json"):
+                (root / name).write_text("{}")
             consumer = root / "sleeping_consumer.py"
             consumer.write_text("import time\ntime.sleep(5)\n")
             args = [str(bridge_path), "--consumer", str(consumer),
@@ -935,6 +939,10 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
         spec.loader.exec_module(bridge)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
+            # The bridge now snapshots producer bytes before launching the
+            # consumer. These fixtures only test subprocess timeout behavior.
+            for name in ("vps.json", "runtime.json"):
+                (root / name).write_text("{}")
             marker = root / "descendant-survived"
             spawned = root / "descendant-pid"
             consumer = root / "spawning_consumer.py"
