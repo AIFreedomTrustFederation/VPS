@@ -576,7 +576,7 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
             spawned = root / "descendant-pid"
             consumer = root / "spawning_consumer.py"
             descendant = (
-                "from pathlib import Path; import time; time.sleep(1.5); "
+                "from pathlib import Path; import time; time.sleep(4); "
                 f"Path({str(marker)!r}).write_text('survived')"
             )
             consumer.write_text(
