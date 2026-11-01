@@ -360,6 +360,56 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             self.assertEqual((vps.read_bytes(), runtime.read_bytes()), original)
 
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux file identity semantics")
+    def test_bridge_rejects_same_byte_replacement_of_original_evidence(self):
+        # An untrusted consumer can replace the original producer pathname
+        # with a different inode containing identical bytes. Byte-only
+        # post-verification checks previously accepted the substituted file.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            original_bytes = vps.read_bytes()
+            original_inode = vps.lstat().st_ino
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            baseline = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+            tampering = STRICT_BRIDGE_CONSUMER.replace(
+                "print(json.dumps({'schema':",
+                "from pathlib import Path\\n"
+                "import os\\n"
+                f"_original = Path({str(vps)!r})\\n"
+                "_replacement = _original.with_suffix('.swap')\\n"
+                "_replacement.write_bytes(_original.read_bytes())\\n"
+                "os.replace(_replacement, _original)\\n"
+                "print(json.dumps({'schema':"
+            )
+            self.assertNotEqual(tampering, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(tampering)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Producer evidence changed during verification", invalid.stderr)
+            self.assertEqual(vps.read_bytes(), original_bytes)
+            self.assertNotEqual(vps.lstat().st_ino, original_inode)
+
+
     def test_bridge_rejects_partial_report_omitting_expected_repository(self):
         # A consumer that drops Runtime but reports "partial" must not turn
         # this cross-repository integration check green.
