@@ -393,12 +393,12 @@ class BridgeOriginalBytesTests(unittest.TestCase):
 
             tampering = STRICT_BRIDGE_CONSUMER.replace(
                 "print(json.dumps({'schema':",
-                "from pathlib import Path\\n"
-                "import os\\n"
-                f"_original = Path({str(vps)!r})\\n"
-                "_replacement = _original.with_suffix('.swap')\\n"
-                "_replacement.write_bytes(_original.read_bytes())\\n"
-                "os.replace(_replacement, _original)\\n"
+                "from pathlib import Path\n"
+                "import os\n"
+                f"_original = Path({str(vps)!r})\n"
+                "_replacement = _original.with_suffix('.swap')\n"
+                "_replacement.write_bytes(_original.read_bytes())\n"
+                "os.replace(_replacement, _original)\n"
                 "print(json.dumps({'schema':"
             )
             self.assertNotEqual(tampering, STRICT_BRIDGE_CONSUMER)
