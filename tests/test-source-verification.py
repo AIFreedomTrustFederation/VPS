@@ -682,6 +682,59 @@ class BridgeOriginalBytesTests(unittest.TestCase):
 
 
 
+class BridgeStrictJsonTests(unittest.TestCase):
+    def test_bridge_rejects_nonfinite_consumer_assessment(self):
+        # json.loads accepts NaN and Infinity by default, including values
+        # unrelated to status. The bridge must reject ambiguous JSON bytes.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            consumer = root / "consumer.py"
+            sha = "a" * 40
+            vps = root / "vps.json"
+            runtime = root / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge),
+                       "--consumer", str(consumer), "--vps-record", str(vps),
+                       "--runtime-record", str(runtime), "--vps-sha", sha,
+                       "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            marker = "'schema':'aift.federation-assessment.v1',"
+            self.assertIn(marker, STRICT_BRIDGE_CONSUMER)
+            for literal, expression in (("NaN", "float('nan')"),
+                                        ("Infinity", "float('inf')"),
+                                        ("-Infinity", "float('-inf')")):
+                with self.subTest(literal=literal):
+                    mutated = STRICT_BRIDGE_CONSUMER.replace(
+                        marker, marker + "'unused':" + expression + ",", 1)
+                    consumer.write_text(mutated)
+                    invalid = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+                    self.assertIn("Consumer assessment contains non-finite number",
+                                  invalid.stderr)
+
+            # Python also decodes 1e9999 to infinity even without a NaN
+            # constant. Exercise the bridge's exponent-overflow guard.
+            bridge_spec = importlib.util.spec_from_file_location("strict_bridge", bridge)
+            bridge_module = importlib.util.module_from_spec(bridge_spec)
+            bridge_spec.loader.exec_module(bridge_module)
+            with self.assertRaisesRegex(RuntimeError, "non-finite number"):
+                bridge_module.finite_assessment_float("1e9999")
+            self.assertEqual(bridge_module.finite_assessment_float("1.25"), 1.25)
+
+
 class BridgeConsumerTimeoutTests(unittest.TestCase):
     def test_hung_consumer_fails_closed_without_waiting_for_job_timeout(self):
         # Exercise a real sleeping subprocess, not a mocked return code.
