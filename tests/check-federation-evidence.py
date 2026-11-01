@@ -44,17 +44,24 @@ def main():
             process = subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, start_new_session=True)
+            timed_out = False
             try:
                 stdout, stderr = process.communicate(timeout=CONSUMER_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired as exc:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass  # The process group already exited.
-                process.communicate(timeout=5)
+                timed_out = True
                 raise RuntimeError(
                     f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds"
                 ) from exc
+            finally:
+                # A consumer may exit successfully but leave background
+                # descendants with closed stdout/stderr. Always terminate
+                # its process group before inspecting or publishing evidence.
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass  # No processes remain in the consumer's group.
+                if timed_out or process.poll() is None:
+                    process.communicate(timeout=5)
             result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
