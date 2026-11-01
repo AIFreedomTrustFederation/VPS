@@ -53,12 +53,24 @@ def run_consumer_bounded(command):
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ, "stdout")
             selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+            descendants_cleaned = False
             while selector.get_map():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise RuntimeError(
                         f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds")
-                for key, _ in selector.select(timeout=remaining):
+                # A successful parent can exit while a descendant keeps the
+                # inherited pipes open. Reap its process group promptly, then
+                # drain any assessment bytes already buffered in the pipes.
+                if process.poll() is not None and not descendants_cleaned:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    descendants_cleaned = True
+                # Periodically inspect parent exit even if inherited pipes
+                # have no activity; otherwise we wait for a false timeout.
+                for key, _ in selector.select(timeout=min(remaining, 0.25)):
                     chunk = os.read(key.fileobj.fileno(), 65536)
                     if not chunk:
                         selector.unregister(key.fileobj)

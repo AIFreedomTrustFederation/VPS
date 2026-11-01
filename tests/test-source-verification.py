@@ -823,6 +823,39 @@ class BridgeBoundedCaptureTests(unittest.TestCase):
         self.assertEqual(len(result.stderr.encode("utf-8")),
                          self.bridge.MAX_CONSUMER_STDERR_BYTES)
 
+    def test_successful_consumer_with_inherited_pipes_is_cleaned_promptly(self):
+        # The parent exits 0 and prints a complete assessment, but its
+        # descendant inherits stdout/stderr. Waiting for pipe EOF lets that
+        # descendant keep running after the parent has exited.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ready = root / "descendant-ready"
+            marker = root / "late-descendant-write"
+            descendant = (
+                "import time; from pathlib import Path; "
+                f"Path({str(ready)!r}).write_text('ready'); "
+                f"time.sleep(2); Path({str(marker)!r}).write_text('escaped')"
+            )
+            parent = (
+                "import subprocess, sys, time; from pathlib import Path; "
+                f"subprocess.Popen([sys.executable, '-B', '-c', {descendant!r}], "
+                "stdout=sys.stdout, stderr=sys.stderr); "
+                f"ready=Path({str(ready)!r}); "
+                "[(time.sleep(.01)) for _ in range(100) if not ready.exists()]; "
+                "print('{}', flush=True)"
+            )
+            started = time.monotonic()
+            with patch.object(self.bridge, "CONSUMER_TIMEOUT_SECONDS", 5):
+                result = self.bridge.run_consumer_bounded(
+                    [sys.executable, "-B", "-c", parent])
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout.strip(), "{}")
+            self.assertTrue(ready.exists(), "Fixture descendant never started")
+            self.assertLess(time.monotonic() - started, 4.5)
+            time.sleep(2.5)
+            self.assertFalse(marker.exists(),
+                             "Consumer descendant wrote after parent exited")
+
 
 class BridgeConsumerTimeoutTests(unittest.TestCase):
     def test_hung_consumer_fails_closed_without_waiting_for_job_timeout(self):
