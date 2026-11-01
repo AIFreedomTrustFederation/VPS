@@ -1069,5 +1069,43 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
             self.assertFalse(marker.exists(), "Successful consumer left a live descendant")
 
 
+class EvidenceSnapshotIdentityTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux inode and symlink race")
+    def test_snapshot_binds_stat_and_open_to_same_inode(self):
+        # Replacing a pathname between lstat() and open() used to make the
+        # snapshot read bytes from a different artifact. The final check
+        # would notice only after the consumer had already processed it.
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        spec = importlib.util.spec_from_file_location("vps_bound_evidence", bridge_path)
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+        for phase in ("initial", "final", "symlink"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as temp:
+                source = Path(temp) / "producer.json"
+                source.write_bytes(b'{"schema":"aift.verification.v1"}')
+                raw, identity = bridge.read_bound_producer_evidence(source)
+                self.assertEqual(raw, source.read_bytes())
+                self.assertEqual(bridge.read_bound_producer_evidence(source, identity),
+                                 (raw, identity))
+                replacement = Path(temp) / "replacement.json"
+                replacement.write_bytes(raw)
+                original_open = bridge.os.open
+
+                def swap_before_open(path, flags, *args, **kwargs):
+                    if Path(path) == source:
+                        if phase == "symlink":
+                            source.unlink()
+                            source.symlink_to(replacement)
+                        else:
+                            bridge.os.replace(replacement, source)
+                    return original_open(path, flags, *args, **kwargs)
+
+                with patch.object(bridge.os, "open", side_effect=swap_before_open):
+                    with self.assertRaisesRegex(
+                            RuntimeError, "Producer evidence changed during verification"):
+                        bridge.read_bound_producer_evidence(
+                            source, identity if phase == "final" else None)
+
+
 if __name__ == "__main__":
     unittest.main()
