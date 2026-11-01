@@ -3,7 +3,9 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -36,13 +38,24 @@ def main():
                     path = Path(directory) / f"{index}.json"
                     path.write_text(json.dumps(value))
                 command += ["--input", str(path)]
+            # A timed-out consumer may have spawned descendants that inherited
+            # stdout/stderr. Kill its entire process group, not just its leader.
+            # This integration runner executes on Linux in GitHub Actions.
+            process = subprocess.Popen(
+                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, start_new_session=True)
             try:
-                result = subprocess.run(command, capture_output=True, text=True,
-                                        check=False, timeout=CONSUMER_TIMEOUT_SECONDS)
+                stdout, stderr = process.communicate(timeout=CONSUMER_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired as exc:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass  # The process group already exited.
+                process.communicate(timeout=5)
                 raise RuntimeError(
                     f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds"
                 ) from exc
+            result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
         report = json.loads(result.stdout)
