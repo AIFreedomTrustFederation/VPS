@@ -735,6 +735,62 @@ class BridgeStrictJsonTests(unittest.TestCase):
             self.assertEqual(bridge_module.finite_assessment_float("1.25"), 1.25)
 
 
+    def test_bridge_rejects_excessive_consumer_assessment_depth_and_size(self):
+        # Consumer JSON is not trusted merely because the process exited 0.
+        # Deeply nested and oversized ignored fields must fail with controlled
+        # errors, rather than an uncaught parser recursion or a false pass.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            consumer = root / "consumer.py"
+            sha = "a" * 40
+            vps = root / "vps.json"
+            runtime = root / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge),
+                       "--consumer", str(consumer), "--vps-record", str(vps),
+                       "--runtime-record", str(runtime), "--vps-sha", sha,
+                       "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            baseline = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+            start = "print(json.dumps({'schema':"
+            end = "for r in records]}))"
+            self.assertIn(start, STRICT_BRIDGE_CONSUMER)
+            self.assertIn(end, STRICT_BRIDGE_CONSUMER)
+            variants = {
+                "deeply_nested": ("'[' * 2000 + '0' + ']' * 2000",
+                                  "Consumer assessment contains invalid or excessively nested JSON"),
+                "oversized": ("'\"' + 'x' * (2 * 1024 * 1024) + '\"'",
+                              "Consumer assessment exceeds 1 MiB"),
+            }
+            for scenario, (expression, expected_error) in variants.items():
+                with self.subTest(scenario=scenario):
+                    mutated = STRICT_BRIDGE_CONSUMER.replace(
+                        start, "raw = json.dumps({'schema':", 1
+                    ).replace(
+                        end,
+                        "for r in records]})\n"
+                        "print(raw[:-1] + ',\"ignored\":' + " + expression + " + '}')",
+                        1,
+                    )
+                    self.assertNotEqual(mutated, STRICT_BRIDGE_CONSUMER)
+                    consumer.write_text(mutated)
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn(expected_error, result.stderr)
+
+
 class BridgeConsumerTimeoutTests(unittest.TestCase):
     def test_hung_consumer_fails_closed_without_waiting_for_job_timeout(self):
         # Exercise a real sleeping subprocess, not a mocked return code.
