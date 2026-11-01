@@ -769,7 +769,7 @@ class BridgeStrictJsonTests(unittest.TestCase):
             self.assertIn(start, STRICT_BRIDGE_CONSUMER)
             self.assertIn(end, STRICT_BRIDGE_CONSUMER)
             variants = {
-                "deeply_nested": ("'[' * 2000 + '0' + ']' * 2000",
+                "deeply_nested": ("'[' * 20000 + '0' + ']' * 20000",
                                   "Consumer assessment contains invalid or excessively nested JSON"),
                 "oversized": ("'\"' + 'x' * (2 * 1024 * 1024) + '\"'",
                               "Consumer assessment exceeds 1 MiB"),
