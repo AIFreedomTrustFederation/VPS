@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -72,6 +73,26 @@ class EvidenceTests(unittest.TestCase):
             code, record = self.generate(("import time; time.sleep(1)",))
         self.assertEqual(code, 1)
         self.assertEqual(record["checks"][0]["exit_code"], 124)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-group cleanup")
+    def test_timed_out_check_kills_descendant_process(self):
+        # subprocess.run(timeout=...) kills only its immediate child. A
+        # grandchild could otherwise modify files after verification ends.
+        marker = self.base / "late-descendant"
+        ready = self.base / "descendant-spawned"
+        grandchild = ("import time; from pathlib import Path; "
+                      f"time.sleep(3); Path({str(marker)!r}).write_text('escaped')")
+        parent = ("import subprocess, sys, time; from pathlib import Path; "
+                  f"subprocess.Popen([sys.executable, '-B', '-c', {grandchild!r}]); "
+                  f"Path({str(ready)!r}).write_text('spawned'); time.sleep(30)")
+        with patch.object(evidence, "CHECK_TIMEOUT", 2):
+            check = evidence.run_check(
+                "descendant_timeout", [sys.executable, "-B", "-c", parent], self.root)
+        self.assertTrue(ready.exists(), "fixture failed to start its descendant")
+        self.assertEqual(check["exit_code"], 124)
+        self.assertEqual(check["status"], "failed")
+        time.sleep(3.5)
+        self.assertFalse(marker.exists(), "timed-out check left a live descendant")
 
     def test_initial_dirty_checkout_fails_even_if_command_cleans_it(self):
         (self.root / "untracked").write_text("dirty")
