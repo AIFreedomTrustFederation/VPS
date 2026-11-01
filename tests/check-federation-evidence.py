@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -21,6 +22,18 @@ def reject_duplicate_assessment_keys(pairs):
             raise RuntimeError(f"Consumer assessment contains duplicate JSON key: {key}")
         result[key] = value
     return result
+
+
+def reject_nonfinite_assessment(value):
+    """Reject nonstandard JSON constants and overflowing numeric exponents."""
+    raise RuntimeError(f"Consumer assessment contains non-finite number: {value}")
+
+
+def finite_assessment_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        reject_nonfinite_assessment(value)
+    return number
 
 
 def main():
@@ -75,7 +88,12 @@ def main():
             result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
-        report = json.loads(result.stdout, object_pairs_hook=reject_duplicate_assessment_keys)
+        report = json.loads(
+            result.stdout,
+            object_pairs_hook=reject_duplicate_assessment_keys,
+            parse_constant=reject_nonfinite_assessment,
+            parse_float=finite_assessment_float,
+        )
         if report.get("schema") != "aift.federation-assessment.v1":
             raise RuntimeError("Consumer assessment schema mismatch")
         # Every assessment, including rejected evidence, must retain the
