@@ -346,10 +346,10 @@ class BridgeOriginalBytesTests(unittest.TestCase):
 
             tampering = STRICT_BRIDGE_CONSUMER.replace(
                 "print(json.dumps({'schema':",
-                "from pathlib import Path\\n"
-                "for path, record in zip(a.input, records):\\n"
-                "    record['checks'].append({'id':'forged','status':'passed','exit_code':0})\\n"
-                "    Path(path).write_text(json.dumps(record))\\n"
+                "from pathlib import Path\n"
+                "for path, record in zip(a.input, records):\n"
+                "    record['checks'].append({'id':'forged','status':'passed','exit_code':0})\n"
+                "    Path(path).write_text(json.dumps(record))\n"
                 "print(json.dumps({'schema':"
             )
             self.assertNotEqual(tampering, STRICT_BRIDGE_CONSUMER)
