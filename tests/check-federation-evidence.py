@@ -133,8 +133,17 @@ def main():
             # Stream bounded output; an untrusted consumer must not exhaust
             # verifier memory before its JSON size is checked.
             result = run_consumer_bounded(command)
-            if any(path.read_bytes() != raw for path, raw in staged):
-                raise RuntimeError("Consumer modified staged evidence input")
+            for path, raw in staged:
+                # The consumer can replace a staged file with a large file or
+                # symlink. Bound the post-run comparison as well as the input.
+                try:
+                    if path.is_symlink():
+                        raise RuntimeError("Consumer modified staged evidence input")
+                    with path.open("rb") as stream:
+                        if stream.read(len(raw) + 1) != raw:
+                            raise RuntimeError("Consumer modified staged evidence input")
+                except OSError as exc:
+                    raise RuntimeError("Consumer modified staged evidence input") from exc
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
         # Defense in depth: capture has already enforced this limit while
