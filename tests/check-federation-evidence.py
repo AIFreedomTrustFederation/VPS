@@ -148,7 +148,8 @@ def main():
     expected = {"AIFreedomTrustFederation/VPS": args.vps_sha,
                 "AIFreedomTrustFederation/AIFT-Runtime": args.runtime_sha}
 
-    def assess(values, expected_code, expected_status, failed_gate=None):
+    def assess(values, expected_code, expected_status, failed_gate=None,
+               failed_check_repo=None):
         with tempfile.TemporaryDirectory(prefix="aift-evidence-integration-") as directory:
             command = [sys.executable, "-B", str(args.consumer)]
             for repo, sha in expected.items():
@@ -205,22 +206,26 @@ def main():
             raise RuntimeError(f"Unexpected assessment: {report}")
         # A negative gate must be attributed to the correct producer and gate.
         # A generic failed status alone would hide which boundary failed.
-        if failed_gate is not None:
-            failed_repo, gate = failed_gate
+        if failed_gate is not None or failed_check_repo is not None:
+            failed_repo, gate = (failed_gate if failed_gate is not None
+                                 else (failed_check_repo, None))
+            attribution_error = ("Consumer negative gate attribution mismatch"
+                                 if gate is not None else
+                                 "Consumer failed check attribution mismatch")
             entries = report.get("repositories")
             if (not isinstance(entries, list) or len(entries) != len(expected)
                     or any(not isinstance(item, dict) for item in entries)
                     or any(not isinstance(item.get("repository"), str) for item in entries)):
-                raise RuntimeError("Consumer negative gate attribution mismatch")
+                raise RuntimeError(attribution_error)
             by_repo = {item["repository"]: item for item in entries}
             if (len(by_repo) != len(entries) or set(by_repo) != set(expected)
                     or report.get("errors", []) != []
                     or any(item.get("commit_sha") != expected[repo]
-                           or item.get("failed_gates") != ([gate] if repo == failed_repo else [])
+                           or item.get("failed_gates") != ([gate] if repo == failed_repo and gate is not None else [])
                            or item.get("status") != ("failed" if repo == failed_repo
                                                      else "reported_checks_passed_with_gaps")
                            for repo, item in by_repo.items())):
-                raise RuntimeError("Consumer negative gate attribution mismatch")
+                raise RuntimeError(attribution_error)
         return report
 
     # Snapshot producer bytes from the inspected inode before consumer execution.
@@ -272,7 +277,7 @@ def main():
     failed = json.loads(json.dumps(records))
     failed[0]["checks"][0].update(status="failed", exit_code=7)
     failed[0]["overall_status"] = "failed"
-    assess(failed, 1, "failed")
+    assess(failed, 1, "failed", failed_check_repo=records[0]["repository"])
     # Exercise Runtime independently: a consumer must not silently trust the
     # second producer while correctly rejecting only VPS corruption.
     stale_runtime = json.loads(json.dumps(records))
@@ -281,7 +286,7 @@ def main():
     failed_runtime = json.loads(json.dumps(records))
     failed_runtime[1]["checks"][0].update(status="failed", exit_code=7)
     failed_runtime[1]["overall_status"] = "failed"
-    assess(failed_runtime, 1, "failed")
+    assess(failed_runtime, 1, "failed", failed_check_repo=records[1]["repository"])
     # A successful source-check exit code must never mask a failed security
     # gate from either producer. This protects the cross-repository handoff
     # against a consumer regression that ignores negative gate evidence.

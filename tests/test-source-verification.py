@@ -702,6 +702,44 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                           invalid.stderr)
 
 
+    def test_bridge_rejects_failed_check_without_repository_attribution(self):
+        # A consumer can return a global failed status while incorrectly
+        # reporting a failed source check as passed for its producer.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            baseline = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+            marker = "'status':('failed' if r['overall_status'] != 'passed' or"
+            self.assertIn(marker, STRICT_BRIDGE_CONSUMER)
+            # Keep the global failed status and nonzero exit, but misattribute
+            # both producers' failed source checks as passing.
+            consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(
+                marker, "'status':('failed' if False or"))
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer failed check attribution mismatch", invalid.stderr)
+
+
     def test_bridge_rejects_failed_gate_without_gate_attribution(self):
         # A consumer can return failed for a negative gate while omitting the
         # specific failed_gates entry. That is not a complete gate assessment.
