@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
@@ -49,10 +50,23 @@ def checkout_clean(root: Path, expected_sha: str) -> bool:
 
 def run_check(check_id: str, command: list[str], root: Path) -> dict:
     try:
-        code = subprocess.run(command, cwd=root, check=False, timeout=CHECK_TIMEOUT).returncode
-    except subprocess.TimeoutExpired:
-        print(f"{check_id}: timed out", file=sys.stderr)
-        code = 124
+        # Isolate source checks so a timed-out parent cannot leave children
+        # running and modifying the checkout after evidence is published.
+        process = subprocess.Popen(
+            command, cwd=root, start_new_session=(os.name == "posix"))
+        try:
+            code = process.wait(timeout=CHECK_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass  # The process group has already exited.
+            else:
+                process.kill()  # Preserve the prior non-POSIX behavior.
+            process.wait(timeout=5)
+            print(f"{check_id}: timed out", file=sys.stderr)
+            code = 124
     except OSError as error:
         print(f"{check_id}: could not execute: {error}", file=sys.stderr)
         code = 127
