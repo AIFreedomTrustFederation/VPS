@@ -34,7 +34,7 @@ def main():
     expected = {"AIFreedomTrustFederation/VPS": args.vps_sha,
                 "AIFreedomTrustFederation/AIFT-Runtime": args.runtime_sha}
 
-    def assess(values, expected_code, expected_status):
+    def assess(values, expected_code, expected_status, failed_gate=None):
         with tempfile.TemporaryDirectory(prefix="aift-evidence-integration-") as directory:
             command = [sys.executable, "-B", str(args.consumer)]
             for repo, sha in expected.items():
@@ -85,6 +85,24 @@ def main():
             raise RuntimeError("Consumer assessment provenance mismatch")
         if report["status"] != expected_status:
             raise RuntimeError(f"Unexpected assessment: {report}")
+        # A negative gate must be attributed to the correct producer and gate.
+        # A generic failed status alone would hide which boundary failed.
+        if failed_gate is not None:
+            failed_repo, gate = failed_gate
+            entries = report.get("repositories")
+            if (not isinstance(entries, list) or len(entries) != len(expected)
+                    or any(not isinstance(item, dict) for item in entries)
+                    or any(not isinstance(item.get("repository"), str) for item in entries)):
+                raise RuntimeError("Consumer negative gate attribution mismatch")
+            by_repo = {item["repository"]: item for item in entries}
+            if (len(by_repo) != len(entries) or set(by_repo) != set(expected)
+                    or report.get("errors", []) != []
+                    or any(item.get("commit_sha") != expected[repo]
+                           or item.get("failed_gates") != ([gate] if repo == failed_repo else [])
+                           or item.get("status") != ("failed" if repo == failed_repo
+                                                     else "reported_checks_passed_with_gaps")
+                           for repo, item in by_repo.items())):
+                raise RuntimeError("Consumer negative gate attribution mismatch")
         return report
 
     # Validate the original evidence files before creating mutated negative fixtures.
@@ -147,7 +165,7 @@ def main():
         failed_security[index]["security"] = {
             "status": "failed", "reason": "Synthetic negative security evidence."
         }
-        assess(failed_security, 1, "failed")
+        assess(failed_security, 1, "failed", (records[index]["repository"], "security"))
     # A failed dependency or deployment gate must fail the assessment even
     # when source checks and the security gate pass.
     for gate in ("dependencies", "deployment"):
@@ -156,7 +174,7 @@ def main():
             failed_gate[index][gate] = {
                 "status": "failed", "reason": f"Synthetic negative {gate} evidence."
             }
-            assess(failed_gate, 1, "failed")
+            assess(failed_gate, 1, "failed", (records[index]["repository"], gate))
     print("Federation evidence integration: VPS and Runtime passed; missing, stale, failed checks and all negative gates checked.")
     return 0
 
