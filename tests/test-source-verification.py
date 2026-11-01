@@ -518,7 +518,7 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                 start,
                 "print('{\\\"schema\\\":\\\"aift.federation-assessment.v0\\\",' + json.dumps({'schema':'aift.federation-assessment.v1',",
                 1,
-            ).replace(end, "for r in records]})[1:]", 1)
+            ).replace(end, "for r in records]})[1:])", 1)
             consumer.write_text(ambiguous)
             invalid = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
