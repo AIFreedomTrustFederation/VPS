@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 CONSUMER_TIMEOUT_SECONDS = 60
+MAX_ASSESSMENT_BYTES = 1024 * 1024
 
 
 def reject_duplicate_assessment_keys(pairs):
@@ -88,12 +89,22 @@ def main():
             result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
-        report = json.loads(
-            result.stdout,
-            object_pairs_hook=reject_duplicate_assessment_keys,
-            parse_constant=reject_nonfinite_assessment,
-            parse_float=finite_assessment_float,
-        )
+        # Bound accepted assessment bytes before parsing. communicate() still
+        # buffers stdout, so this is a parsing/contract limit rather than a
+        # process-memory limit; the process timeout remains independent.
+        if len(result.stdout.encode("utf-8")) > MAX_ASSESSMENT_BYTES:
+            raise RuntimeError("Consumer assessment exceeds 1 MiB")
+        try:
+            report = json.loads(
+                result.stdout,
+                object_pairs_hook=reject_duplicate_assessment_keys,
+                parse_constant=reject_nonfinite_assessment,
+                parse_float=finite_assessment_float,
+            )
+        except (ValueError, RecursionError) as exc:
+            raise RuntimeError("Consumer assessment contains invalid or excessively nested JSON") from exc
+        if not isinstance(report, dict):
+            raise RuntimeError("Consumer assessment must be a JSON object")
         if report.get("schema") != "aift.federation-assessment.v1":
             raise RuntimeError("Consumer assessment schema mismatch")
         # Every assessment, including rejected evidence, must retain the
