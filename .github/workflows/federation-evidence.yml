@@ -1,0 +1,83 @@
+name: Federation source evidence integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: federation-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: vps
+    steps:
+      - name: Check out VPS
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          path: vps
+          persist-credentials: false
+      - name: Check out the audited AIFT-OS evidence consumer
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: AIFreedomTrustFederation/AIFT-OS
+          ref: 57b482cb255b26b0fe4e81cfba7dc97caf86bf1c
+          path: aift-os
+          persist-credentials: false
+      - name: Check out the audited AIFT-Runtime producer
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: AIFreedomTrustFederation/AIFT-Runtime
+          ref: b437db4b8102e6f85f5f357e3e4e16dac578528e
+          path: aift-runtime
+          persist-credentials: false
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+      - name: Use Python 3.13
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Test checkout commit binding guard
+        run: python -B -m unittest discover -s tests -p test_federation_checkouts.py -v
+      - name: Run VPS source checks and emit evidence
+        run: python -B scripts/run_source_verification.py --output "${RUNNER_TEMP}/aift-vps-verification.json"
+      - name: Run Runtime source checks and emit evidence
+        working-directory: aift-runtime
+        run: |
+          env GITHUB_SHA=b437db4b8102e6f85f5f357e3e4e16dac578528e \
+            GITHUB_REPOSITORY=AIFreedomTrustFederation/AIFT-Runtime \
+            GITHUB_ACTIONS=false \
+            python -B scripts/run_runtime_verification.py --output "${RUNNER_TEMP}/aift-runtime-verification.json"
+      - name: Verify both records with the actual AIFT-OS consumer
+        run: |
+          python -B tests/check-federation-evidence.py \
+            --consumer ../aift-os/scripts/check_federation_evidence.py \
+            --vps-record "${RUNNER_TEMP}/aift-vps-verification.json" \
+            --runtime-record "${RUNNER_TEMP}/aift-runtime-verification.json" \
+            --vps-sha "$(git rev-parse HEAD)" \
+            --runtime-sha "$(git -C ../aift-runtime rev-parse HEAD)"
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: federation-source-evidence
+          path: |
+            ${{ runner.temp }}/aift-vps-verification.json
+            ${{ runner.temp }}/aift-runtime-verification.json
+          if-no-files-found: warn
+      - name: Confirm checkouts remain pinned and clean
+        run: |
+          python -B tests/check-federation-checkouts.py \
+            --checkout ".=${GITHUB_SHA}" \
+            --checkout "../aift-runtime=b437db4b8102e6f85f5f357e3e4e16dac578528e" \
+            --checkout "../aift-os=57b482cb255b26b0fe4e81cfba7dc97caf86bf1c"
