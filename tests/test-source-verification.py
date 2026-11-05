@@ -360,6 +360,56 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             self.assertEqual((vps.read_bytes(), runtime.read_bytes()), original)
 
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux file identity semantics")
+    def test_bridge_rejects_same_byte_replacement_of_original_evidence(self):
+        # An untrusted consumer can replace the original producer pathname
+        # with a different inode containing identical bytes. Byte-only
+        # post-verification checks previously accepted the substituted file.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            original_bytes = vps.read_bytes()
+            original_inode = vps.lstat().st_ino
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            baseline = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+            tampering = STRICT_BRIDGE_CONSUMER.replace(
+                "print(json.dumps({'schema':",
+                "from pathlib import Path\n"
+                "import os\n"
+                f"_original = Path({str(vps)!r})\n"
+                "_replacement = _original.with_suffix('.swap')\n"
+                "_replacement.write_bytes(_original.read_bytes())\n"
+                "os.replace(_replacement, _original)\n"
+                "print(json.dumps({'schema':"
+            )
+            self.assertNotEqual(tampering, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(tampering)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Producer evidence changed during verification", invalid.stderr)
+            self.assertEqual(vps.read_bytes(), original_bytes)
+            self.assertNotEqual(vps.lstat().st_ino, original_inode)
+
+
     def test_bridge_rejects_partial_report_omitting_expected_repository(self):
         # A consumer that drops Runtime but reports "partial" must not turn
         # this cross-repository integration check green.
@@ -650,6 +700,44 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
             self.assertIn("Consumer must preserve executed check counts and unchecked gates",
                           invalid.stderr)
+
+
+    def test_bridge_rejects_failed_check_without_repository_attribution(self):
+        # A consumer can return a global failed status while incorrectly
+        # reporting a failed source check as passed for its producer.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            baseline = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+            marker = "'status':('failed' if r['overall_status'] != 'passed' or"
+            self.assertIn(marker, STRICT_BRIDGE_CONSUMER)
+            # Keep the global failed status and nonzero exit, but misattribute
+            # both producers' failed source checks as passing.
+            consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(
+                marker, "'status':('failed' if False or"))
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer failed check attribution mismatch", invalid.stderr)
 
 
     def test_bridge_rejects_failed_gate_without_gate_attribution(self):
@@ -1017,6 +1105,44 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
             self.assertTrue(ready.exists(), "Consumer fixture did not spawn a child")
             time.sleep(3.5)
             self.assertFalse(marker.exists(), "Successful consumer left a live descendant")
+
+
+class EvidenceSnapshotIdentityTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux inode and symlink race")
+    def test_snapshot_binds_stat_and_open_to_same_inode(self):
+        # Replacing a pathname between lstat() and open() used to make the
+        # snapshot read bytes from a different artifact. The final check
+        # would notice only after the consumer had already processed it.
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        spec = importlib.util.spec_from_file_location("vps_bound_evidence", bridge_path)
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+        for phase in ("initial", "final", "symlink"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as temp:
+                source = Path(temp) / "producer.json"
+                source.write_bytes(b'{"schema":"aift.verification.v1"}')
+                raw, identity = bridge.read_bound_producer_evidence(source)
+                self.assertEqual(raw, source.read_bytes())
+                self.assertEqual(bridge.read_bound_producer_evidence(source, identity),
+                                 (raw, identity))
+                replacement = Path(temp) / "replacement.json"
+                replacement.write_bytes(raw)
+                original_open = bridge.os.open
+
+                def swap_before_open(path, flags, *args, **kwargs):
+                    if Path(path) == source:
+                        if phase == "symlink":
+                            source.unlink()
+                            source.symlink_to(replacement)
+                        else:
+                            bridge.os.replace(replacement, source)
+                    return original_open(path, flags, *args, **kwargs)
+
+                with patch.object(bridge.os, "open", side_effect=swap_before_open):
+                    with self.assertRaisesRegex(
+                            RuntimeError, "Producer evidence changed during verification"):
+                        bridge.read_bound_producer_evidence(
+                            source, identity if phase == "final" else None)
 
 
 if __name__ == "__main__":

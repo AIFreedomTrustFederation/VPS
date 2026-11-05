@@ -8,6 +8,7 @@ import os
 import selectors
 from pathlib import Path
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -104,6 +105,38 @@ def run_consumer_bounded(command):
         process.stderr.close()
 
 
+def read_bound_producer_evidence(source, expected_identity=None):
+    """Read a regular evidence file from the same inode that was inspected.
+
+    Bind lstat, open, and fstat before trusting bytes; O_NOFOLLOW rejects a
+    symlink swapped into place during open on supported platforms.
+    """
+    try:
+        before = source.lstat()
+        if not stat.S_ISREG(before.st_mode):
+            raise RuntimeError("Producer evidence must be a regular file")
+        identity = (before.st_dev, before.st_ino)
+        if expected_identity is not None and identity != expected_identity:
+            raise RuntimeError("Producer evidence changed during verification")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        descriptor = os.open(source, flags)
+        with os.fdopen(descriptor, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(opened.st_mode)
+                    or (opened.st_dev, opened.st_ino) != identity):
+                raise RuntimeError("Producer evidence changed during verification")
+            raw = stream.read(MAX_ASSESSMENT_BYTES + 1)
+        after = source.lstat()
+        if (not stat.S_ISREG(after.st_mode)
+                or (after.st_dev, after.st_ino) != identity):
+            raise RuntimeError("Producer evidence changed during verification")
+    except OSError as exc:
+        raise RuntimeError("Producer evidence changed during verification") from exc
+    if len(raw) > MAX_ASSESSMENT_BYTES:
+        raise RuntimeError("Producer evidence exceeds 1 MiB")
+    return raw, identity
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--consumer", type=Path, required=True)
@@ -115,7 +148,8 @@ def main():
     expected = {"AIFreedomTrustFederation/VPS": args.vps_sha,
                 "AIFreedomTrustFederation/AIFT-Runtime": args.runtime_sha}
 
-    def assess(values, expected_code, expected_status, failed_gate=None):
+    def assess(values, expected_code, expected_status, failed_gate=None,
+               failed_check_repo=None):
         with tempfile.TemporaryDirectory(prefix="aift-evidence-integration-") as directory:
             command = [sys.executable, "-B", str(args.consumer)]
             for repo, sha in expected.items():
@@ -172,34 +206,36 @@ def main():
             raise RuntimeError(f"Unexpected assessment: {report}")
         # A negative gate must be attributed to the correct producer and gate.
         # A generic failed status alone would hide which boundary failed.
-        if failed_gate is not None:
-            failed_repo, gate = failed_gate
+        if failed_gate is not None or failed_check_repo is not None:
+            failed_repo, gate = (failed_gate if failed_gate is not None
+                                 else (failed_check_repo, None))
+            attribution_error = ("Consumer negative gate attribution mismatch"
+                                 if gate is not None else
+                                 "Consumer failed check attribution mismatch")
             entries = report.get("repositories")
             if (not isinstance(entries, list) or len(entries) != len(expected)
                     or any(not isinstance(item, dict) for item in entries)
                     or any(not isinstance(item.get("repository"), str) for item in entries)):
-                raise RuntimeError("Consumer negative gate attribution mismatch")
+                raise RuntimeError(attribution_error)
             by_repo = {item["repository"]: item for item in entries}
             if (len(by_repo) != len(entries) or set(by_repo) != set(expected)
                     or report.get("errors", []) != []
                     or any(item.get("commit_sha") != expected[repo]
-                           or item.get("failed_gates") != ([gate] if repo == failed_repo else [])
+                           or item.get("failed_gates") != ([gate] if repo == failed_repo and gate is not None else [])
                            or item.get("status") != ("failed" if repo == failed_repo
                                                      else "reported_checks_passed_with_gaps")
                            for repo, item in by_repo.items())):
-                raise RuntimeError("Consumer negative gate attribution mismatch")
+                raise RuntimeError(attribution_error)
         return report
 
-    # Snapshot each producer record exactly once, before invoking a consumer.
-    # Both the consumer and subsequent bridge assertions use these same bytes.
+    # Snapshot producer bytes from the inspected inode before consumer execution.
     sources = (args.vps_record, args.runtime_record)
     original_inputs = []
+    original_identities = []
     for source in sources:
-        with source.open("rb") as stream:
-            raw = stream.read(MAX_ASSESSMENT_BYTES + 1)
-        if len(raw) > MAX_ASSESSMENT_BYTES:
-            raise RuntimeError("Producer evidence exceeds 1 MiB")
+        raw, identity = read_bound_producer_evidence(source)
         original_inputs.append(raw)
+        original_identities.append(identity)
     report = assess(original_inputs, 0, "partial")
     records = [json.loads(raw) for raw in original_inputs]
     if report["provenance"] != "unsigned_supplied_json_not_authenticated":
@@ -241,7 +277,7 @@ def main():
     failed = json.loads(json.dumps(records))
     failed[0]["checks"][0].update(status="failed", exit_code=7)
     failed[0]["overall_status"] = "failed"
-    assess(failed, 1, "failed")
+    assess(failed, 1, "failed", failed_check_repo=records[0]["repository"])
     # Exercise Runtime independently: a consumer must not silently trust the
     # second producer while correctly rejecting only VPS corruption.
     stale_runtime = json.loads(json.dumps(records))
@@ -250,7 +286,7 @@ def main():
     failed_runtime = json.loads(json.dumps(records))
     failed_runtime[1]["checks"][0].update(status="failed", exit_code=7)
     failed_runtime[1]["overall_status"] = "failed"
-    assess(failed_runtime, 1, "failed")
+    assess(failed_runtime, 1, "failed", failed_check_repo=records[1]["repository"])
     # A successful source-check exit code must never mask a failed security
     # gate from either producer. This protects the cross-repository handoff
     # against a consumer regression that ignores negative gate evidence.
@@ -269,12 +305,12 @@ def main():
                 "status": "failed", "reason": f"Synthetic negative {gate} evidence."
             }
             assess(failed_gate, 1, "failed", (records[index]["repository"], gate))
-    # An external writer must not swap the producer files after snapshotting
-    # but before the workflow uploads those original evidence paths.
-    for source, original in zip(sources, original_inputs):
-        with source.open("rb") as stream:
-            if stream.read(MAX_ASSESSMENT_BYTES + 1) != original:
-                raise RuntimeError("Producer evidence changed during verification")
+    # Rebind each final read to the original inode before the artifact upload.
+    # This narrows, but cannot eliminate, the race with a later external writer.
+    for source, original, identity in zip(sources, original_inputs, original_identities):
+        current, _ = read_bound_producer_evidence(source, identity)
+        if current != original:
+            raise RuntimeError("Producer evidence changed during verification")
     print("Federation evidence integration: VPS and Runtime passed; missing, stale, failed checks and all negative gates checked.")
     return 0
 
