@@ -3,10 +3,14 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+
+CONSUMER_TIMEOUT_SECONDS = 60
 
 
 def main():
@@ -34,10 +38,34 @@ def main():
                     path = Path(directory) / f"{index}.json"
                     path.write_text(json.dumps(value))
                 command += ["--input", str(path)]
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            # A timed-out consumer may have spawned descendants that inherited
+            # stdout/stderr. Kill its entire process group, not just its leader.
+            # This integration runner executes on Linux in GitHub Actions.
+            process = subprocess.Popen(
+                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, start_new_session=True)
+            try:
+                stdout, stderr = process.communicate(timeout=CONSUMER_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired as exc:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass  # The process group already exited.
+                process.communicate(timeout=5)
+                raise RuntimeError(
+                    f"Consumer timed out after {CONSUMER_TIMEOUT_SECONDS} seconds"
+                ) from exc
+            result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if result.returncode != expected_code:
             raise RuntimeError(f"Consumer exited {result.returncode}, expected {expected_code}: {result.stdout} {result.stderr}")
         report = json.loads(result.stdout)
+        if report.get("schema") != "aift.federation-assessment.v1":
+            raise RuntimeError("Consumer assessment schema mismatch")
+        # Every assessment, including rejected evidence, must retain the
+        # explicit unsigned provenance boundary. A failure must not be
+        # rebranded as authenticated evidence by a consumer regression.
+        if report.get("provenance") != "unsigned_supplied_json_not_authenticated":
+            raise RuntimeError("Consumer assessment provenance mismatch")
         if report["status"] != expected_status:
             raise RuntimeError(f"Unexpected assessment: {report}")
         return report
@@ -59,9 +87,21 @@ def main():
     # A consumer must account for every executed check, not merely claim that
     # the repository passed. A dropped check would otherwise be invisible.
     check_counts = {record["repository"]: len(record["checks"]) for record in records}
+    # A consumer must preserve *every* unchecked gate. Keeping just one gap
+    # would still yield "partial" while hiding other unverified boundaries.
+    expected_gaps = {
+        record["repository"]: [
+            f"{gate}:{record[gate]['status']}"
+            for gate in ("security", "dependencies", "deployment")
+            if record[gate]["status"] in ("not_checked", "not_applicable")
+        ]
+        for record in records
+    }
     for item in entries:
         if (item["status"] != "reported_checks_passed_with_gaps"
-                or not item["unverified_gates"]
+                or not expected_gaps[item["repository"]]
+                or item.get("unverified_gates") != expected_gaps[item["repository"]]
+                or item.get("failed_gates") != []
                 or type(item.get("check_count")) is not int
                 or item["check_count"] != check_counts[item["repository"]]):
             raise RuntimeError("Consumer must preserve executed check counts and unchecked gates")
@@ -82,7 +122,25 @@ def main():
     failed_runtime[1]["checks"][0].update(status="failed", exit_code=7)
     failed_runtime[1]["overall_status"] = "failed"
     assess(failed_runtime, 1, "failed")
-    print("Federation evidence integration: VPS and Runtime passed, missing, stale and failed records checked.")
+    # A successful source-check exit code must never mask a failed security
+    # gate from either producer. This protects the cross-repository handoff
+    # against a consumer regression that ignores negative gate evidence.
+    for index in range(len(records)):
+        failed_security = json.loads(json.dumps(records))
+        failed_security[index]["security"] = {
+            "status": "failed", "reason": "Synthetic negative security evidence."
+        }
+        assess(failed_security, 1, "failed")
+    # A failed dependency or deployment gate must fail the assessment even
+    # when source checks and the security gate pass.
+    for gate in ("dependencies", "deployment"):
+        for index in range(len(records)):
+            failed_gate = json.loads(json.dumps(records))
+            failed_gate[index][gate] = {
+                "status": "failed", "reason": f"Synthetic negative {gate} evidence."
+            }
+            assess(failed_gate, 1, "failed")
+    print("Federation evidence integration: VPS and Runtime passed; missing, stale, failed checks and all negative gates checked.")
     return 0
 
 
