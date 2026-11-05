@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           repository: AIFreedomTrustFederation/AIFT-OS
-          ref: 57b482cb255b26b0fe4e81cfba7dc97caf86bf1c
+          ref: 9cf79faa3af917f211b435ff437672268f0b5a7d
           path: aift-os
           persist-credentials: false
       - name: Check out the audited AIFT-Runtime producer
@@ -80,4 +80,4 @@ jobs:
           python -B tests/check-federation-checkouts.py \
             --checkout ".=${GITHUB_SHA}" \
             --checkout "../aift-runtime=b437db4b8102e6f85f5f357e3e4e16dac578528e" \
-            --checkout "../aift-os=57b482cb255b26b0fe4e81cfba7dc97caf86bf1c"
+            --checkout "../aift-os=9cf79faa3af917f211b435ff437672268f0b5a7d"
