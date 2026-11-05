@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -72,6 +73,64 @@ class EvidenceTests(unittest.TestCase):
             code, record = self.generate(("import time; time.sleep(1)",))
         self.assertEqual(code, 1)
         self.assertEqual(record["checks"][0]["exit_code"], 124)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-group cleanup")
+    def test_timed_out_check_kills_descendant_process(self):
+        # subprocess.run(timeout=...) kills only its immediate child. A
+        # grandchild could otherwise modify files after verification ends.
+        marker = self.base / "late-descendant"
+        ready = self.base / "descendant-spawned"
+        grandchild = ("import time; from pathlib import Path; "
+                      f"time.sleep(3); Path({str(marker)!r}).write_text('escaped')")
+        parent = ("import subprocess, sys, time; from pathlib import Path; "
+                  f"subprocess.Popen([sys.executable, '-B', '-c', {grandchild!r}]); "
+                  f"Path({str(ready)!r}).write_text('spawned'); time.sleep(30)")
+        with patch.object(evidence, "CHECK_TIMEOUT", 2):
+            check = evidence.run_check(
+                "descendant_timeout", [sys.executable, "-B", "-c", parent], self.root)
+        self.assertTrue(ready.exists(), "fixture failed to start its descendant")
+        self.assertEqual(check["exit_code"], 124)
+        self.assertEqual(check["status"], "failed")
+        time.sleep(3.5)
+        self.assertFalse(marker.exists(), "timed-out check left a live descendant")
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-group cleanup")
+    def test_successful_check_kills_lingering_descendant(self):
+        # A parent can exit successfully while a background child continues
+        # modifying files after the clean-checkout assertion and publication.
+        marker = self.base / "late-success-descendant"
+        ready = self.base / "success-descendant-spawned"
+        grandchild = ("import time; from pathlib import Path; "
+                      f"time.sleep(1); Path({str(marker)!r}).write_text('escaped')")
+        parent = ("import subprocess, sys; from pathlib import Path; "
+                  f"subprocess.Popen([sys.executable, '-B', '-c', {grandchild!r}]); "
+                  f"Path({str(ready)!r}).write_text('spawned')")
+        check = evidence.run_check(
+            "success_descendant", [sys.executable, "-B", "-c", parent], self.root)
+        self.assertTrue(ready.exists(), "fixture failed to start its descendant")
+        self.assertEqual(check["exit_code"], 0)
+        self.assertEqual(check["status"], "passed")
+        time.sleep(2)
+        self.assertFalse(marker.exists(), "successful check left a live descendant")
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-group cleanup")
+    def test_failed_check_kills_lingering_descendant(self):
+        # A nonzero parent exit is not a timeout, but its background child
+        # must still be contained before failure evidence is published.
+        marker = self.base / "late-failed-descendant"
+        ready = self.base / "failed-descendant-spawned"
+        grandchild = ("import time; from pathlib import Path; "
+                      f"time.sleep(1); Path({str(marker)!r}).write_text('escaped')")
+        parent = ("import subprocess, sys; from pathlib import Path; "
+                  f"subprocess.Popen([sys.executable, '-B', '-c', {grandchild!r}]); "
+                  f"Path({str(ready)!r}).write_text('spawned'); sys.exit(9)")
+        check = evidence.run_check(
+            "failed_descendant", [sys.executable, "-B", "-c", parent], self.root)
+        self.assertTrue(ready.exists(), "fixture failed to start its descendant")
+        self.assertEqual(check["exit_code"], 9)
+        self.assertEqual(check["status"], "failed")
+        time.sleep(2)
+        self.assertFalse(marker.exists(), "failed check left a live descendant")
 
     def test_initial_dirty_checkout_fails_even_if_command_cleans_it(self):
         (self.root / "untracked").write_text("dirty")
@@ -211,10 +270,12 @@ print(json.dumps({'schema':'aift.federation-assessment.v1',
                   'provenance':'unsigned_supplied_json_not_authenticated',
                   'repositories':[{'repository':r['repository'],
                                    'commit_sha':r['commit_sha'],
-                                   'status':'reported_checks_passed_with_gaps',
+                                   'status':('failed' if r['overall_status'] != 'passed' or
+                                             any(r[g]['status'] == 'failed' for g in ('security','dependencies','deployment'))
+                                             else 'reported_checks_passed_with_gaps'),
                                    'check_count':len(r['checks']),
                                    'unverified_gates':[f"{g}:{r[g]['status']}" for g in ('security','dependencies','deployment') if r[g]['status'] in ('not_checked','not_applicable')],
-                                   'failed_gates':[]} for r in records]}))
+                                   'failed_gates':[g for g in ('security','dependencies','deployment') if r[g]['status']=='failed']} for r in records]}))
 sys.exit(1 if failed else 0)
 '''
 
@@ -421,6 +482,52 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                     self.assertIn("Consumer exited 0, expected 1", invalid.stderr)
 
 
+    def test_bridge_rejects_duplicate_consumer_assessment_keys(self):
+        # Python's default JSON parser accepts duplicate keys and keeps the
+        # last value. An ambiguous assessment must not pass the bridge.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            # Prefix a conflicting schema key, leaving the valid schema last.
+            # Without strict duplicate detection, json.loads silently accepts
+            # the later schema and all other bridge assertions still pass.
+            start = "print(json.dumps({'schema':'aift.federation-assessment.v1',"
+            end = "for r in records]}))"
+            self.assertIn(start, STRICT_BRIDGE_CONSUMER)
+            self.assertIn(end, STRICT_BRIDGE_CONSUMER)
+            ambiguous = STRICT_BRIDGE_CONSUMER.replace(
+                start,
+                "print('{\\\"schema\\\":\\\"aift.federation-assessment.v0\\\",' + json.dumps({'schema':'aift.federation-assessment.v1',",
+                1,
+            ).replace(end, "for r in records]})[1:])", 1)
+            consumer.write_text(ambiguous)
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer assessment contains duplicate JSON key: schema",
+                          invalid.stderr)
+
+
     def test_bridge_requires_assessment_schema_for_both_producers(self):
         # A consumer can return a plausible partial assessment while omitting
         # its machine-readable schema, which breaks downstream compatibility.
@@ -499,6 +606,41 @@ class BridgeOriginalBytesTests(unittest.TestCase):
                           invalid.stderr)
 
 
+    def test_bridge_rejects_failed_gate_without_gate_attribution(self):
+        # A consumer can return failed for a negative gate while omitting the
+        # specific failed_gates entry. That is not a complete gate assessment.
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            consumer = base / "consumer.py"
+            sha = "a" * 40
+            vps = base / "vps.json"
+            runtime = base / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge), "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            marker = "'failed_gates':[g for g in ('security','dependencies','deployment') if r[g]['status']=='failed']"
+            self.assertIn(marker, STRICT_BRIDGE_CONSUMER)
+            consumer.write_text(STRICT_BRIDGE_CONSUMER.replace(marker, "'failed_gates':[]"))
+            invalid = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+            self.assertIn("Consumer negative gate attribution mismatch", invalid.stderr)
+
+
     def test_bridge_rejects_false_authenticated_provenance_on_failure(self):
         # A consumer may preserve unsigned provenance for successful inputs
         # yet claim authenticated provenance for rejected inputs. The bridge
@@ -538,6 +680,181 @@ class BridgeOriginalBytesTests(unittest.TestCase):
             self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
             self.assertIn("Consumer assessment provenance mismatch", invalid.stderr)
 
+
+
+class BridgeStrictJsonTests(unittest.TestCase):
+    def test_bridge_rejects_nonfinite_consumer_assessment(self):
+        # json.loads accepts NaN and Infinity by default, including values
+        # unrelated to status. The bridge must reject ambiguous JSON bytes.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            consumer = root / "consumer.py"
+            sha = "a" * 40
+            vps = root / "vps.json"
+            runtime = root / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge),
+                       "--consumer", str(consumer), "--vps-record", str(vps),
+                       "--runtime-record", str(runtime), "--vps-sha", sha,
+                       "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            valid = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            marker = "'schema':'aift.federation-assessment.v1',"
+            self.assertIn(marker, STRICT_BRIDGE_CONSUMER)
+            for literal, expression in (("NaN", "float('nan')"),
+                                        ("Infinity", "float('inf')"),
+                                        ("-Infinity", "float('-inf')")):
+                with self.subTest(literal=literal):
+                    mutated = STRICT_BRIDGE_CONSUMER.replace(
+                        marker, marker + "'unused':" + expression + ",", 1)
+                    consumer.write_text(mutated)
+                    invalid = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(invalid.returncode, 0, invalid.stdout)
+                    self.assertIn("Consumer assessment contains non-finite number",
+                                  invalid.stderr)
+
+            # Python also decodes 1e9999 to infinity even without a NaN
+            # constant. Exercise the bridge's exponent-overflow guard.
+            bridge_spec = importlib.util.spec_from_file_location("strict_bridge", bridge)
+            bridge_module = importlib.util.module_from_spec(bridge_spec)
+            bridge_spec.loader.exec_module(bridge_module)
+            with self.assertRaisesRegex(RuntimeError, "non-finite number"):
+                bridge_module.finite_assessment_float("1e9999")
+            self.assertEqual(bridge_module.finite_assessment_float("1.25"), 1.25)
+
+
+    def test_bridge_rejects_excessive_consumer_assessment_depth_and_size(self):
+        # Consumer JSON is not trusted merely because the process exited 0.
+        # Deeply nested and oversized ignored fields must fail with controlled
+        # errors, rather than an uncaught parser recursion or a false pass.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            consumer = root / "consumer.py"
+            sha = "a" * 40
+            vps = root / "vps.json"
+            runtime = root / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            bridge = Path(__file__).with_name("check-federation-evidence.py")
+            command = [sys.executable, "-B", str(bridge),
+                       "--consumer", str(consumer), "--vps-record", str(vps),
+                       "--runtime-record", str(runtime), "--vps-sha", sha,
+                       "--runtime-sha", sha]
+            consumer.write_text(STRICT_BRIDGE_CONSUMER)
+            baseline = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+            start = "print(json.dumps({'schema':"
+            end = "for r in records]}))"
+            self.assertIn(start, STRICT_BRIDGE_CONSUMER)
+            self.assertIn(end, STRICT_BRIDGE_CONSUMER)
+            variants = {
+                "deeply_nested": ("'[' * 20000 + '0' + ']' * 20000",
+                                  "Consumer assessment contains invalid or excessively nested JSON"),
+                "oversized": ("'\"' + 'x' * (2 * 1024 * 1024) + '\"'",
+                              "Consumer assessment exceeds 1 MiB"),
+            }
+            for scenario, (expression, expected_error) in variants.items():
+                with self.subTest(scenario=scenario):
+                    mutated = STRICT_BRIDGE_CONSUMER.replace(
+                        start, "raw = json.dumps({'schema':", 1
+                    ).replace(
+                        end,
+                        "for r in records]})\n"
+                        "print(raw[:-1] + ',\"ignored\":' + " + expression + " + '}')",
+                        1,
+                    )
+                    self.assertNotEqual(mutated, STRICT_BRIDGE_CONSUMER)
+                    consumer.write_text(mutated)
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn(expected_error, result.stderr)
+
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "POSIX consumer capture")
+class BridgeBoundedCaptureTests(unittest.TestCase):
+    def setUp(self):
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        spec = importlib.util.spec_from_file_location(
+            "vps_federation_bridge_bounded_capture", bridge_path)
+        self.bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.bridge)
+
+    def test_oversized_stdout_aborts_before_consumer_finishes(self):
+        # An untrusted consumer can emit 2 MiB and then sleep. The bridge
+        # must stop it immediately rather than buffer all output or wait.
+        command = [sys.executable, "-B", "-c",
+                   "import sys,time; sys.stdout.write('x'*(2*1024*1024)); "
+                   "sys.stdout.flush(); time.sleep(12)"]
+        started = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, "Consumer assessment exceeds 1 MiB"):
+            self.bridge.run_consumer_bounded(command)
+        self.assertLess(time.monotonic() - started, 8)
+
+    def test_large_stderr_is_drained_but_bounded(self):
+        # A noisy consumer must not deadlock on stderr or exhaust memory.
+        command = [sys.executable, "-B", "-c",
+                   "import sys; sys.stderr.write('z'*(2*1024*1024)); "
+                   "sys.stdout.write('{}')"]
+        result = self.bridge.run_consumer_bounded(command)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "{}")
+        self.assertEqual(len(result.stderr.encode("utf-8")),
+                         self.bridge.MAX_CONSUMER_STDERR_BYTES)
+
+    def test_successful_consumer_with_inherited_pipes_is_cleaned_promptly(self):
+        # The parent exits 0 and prints a complete assessment, but its
+        # descendant inherits stdout/stderr. Waiting for pipe EOF lets that
+        # descendant keep running after the parent has exited.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ready = root / "descendant-ready"
+            marker = root / "late-descendant-write"
+            descendant = (
+                "import time; from pathlib import Path; "
+                f"Path({str(ready)!r}).write_text('ready'); "
+                f"time.sleep(2); Path({str(marker)!r}).write_text('escaped')"
+            )
+            parent = (
+                "import subprocess, sys, time; from pathlib import Path; "
+                f"subprocess.Popen([sys.executable, '-B', '-c', {descendant!r}], "
+                "stdout=sys.stdout, stderr=sys.stderr); "
+                f"ready=Path({str(ready)!r}); "
+                "[(time.sleep(.01)) for _ in range(100) if not ready.exists()]; "
+                "print('{}', flush=True)"
+            )
+            started = time.monotonic()
+            with patch.object(self.bridge, "CONSUMER_TIMEOUT_SECONDS", 5):
+                result = self.bridge.run_consumer_bounded(
+                    [sys.executable, "-B", "-c", parent])
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout.strip(), "{}")
+            self.assertTrue(ready.exists(), "Fixture descendant never started")
+            self.assertLess(time.monotonic() - started, 4.5)
+            time.sleep(2.5)
+            self.assertFalse(marker.exists(),
+                             "Consumer descendant wrote after parent exited")
 
 
 class BridgeConsumerTimeoutTests(unittest.TestCase):
@@ -597,6 +914,55 @@ class BridgeConsumerTimeoutTests(unittest.TestCase):
             self.assertTrue(spawned.exists(), "Timeout fixture did not spawn a descendant")
             time.sleep(5)
             self.assertFalse(marker.exists(), "Timed-out consumer left a live descendant")
+
+
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process-group cleanup")
+    def test_successful_consumer_kills_closed_pipe_descendants(self):
+        # A consumer may exit 0 and close its pipes while a background child
+        # remains alive. Successful integration must not leave that child
+        # free to mutate checkout or evidence after assessment.
+        import time
+        bridge_path = Path(__file__).with_name("check-federation-evidence.py")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            marker = root / "late-consumer-descendant"
+            ready = root / "consumer-descendant-spawned"
+            consumer = root / "consumer.py"
+            descendant = (
+                "import time; from pathlib import Path; "
+                f"time.sleep(3); Path({str(marker)!r}).write_text('escaped')"
+            )
+            consumer.write_text(
+                "import subprocess, sys\n"
+                f"subprocess.Popen([sys.executable, '-B', '-c', {descendant!r}], "
+                "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+                "stderr=subprocess.DEVNULL)\n"
+                f"from pathlib import Path; Path({str(ready)!r}).write_text('spawned')\n"
+                + STRICT_BRIDGE_CONSUMER
+            )
+            sha = "a" * 40
+            vps = root / "vps.json"
+            runtime = root / "runtime.json"
+            for path, repo in ((vps, "AIFreedomTrustFederation/VPS"),
+                               (runtime, "AIFreedomTrustFederation/AIFT-Runtime")):
+                path.write_text(json.dumps({
+                    "repository": repo, "commit_sha": sha,
+                    "overall_status": "passed",
+                    "checks": [{"id": "source", "status": "passed", "exit_code": 0}],
+                    "security": {"status": "not_checked"},
+                    "dependencies": {"status": "not_checked"},
+                    "deployment": {"status": "not_applicable"},
+                }))
+            command = [sys.executable, "-B", str(bridge_path),
+                       "--consumer", str(consumer),
+                       "--vps-record", str(vps), "--runtime-record", str(runtime),
+                       "--vps-sha", sha, "--runtime-sha", sha]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(ready.exists(), "Consumer fixture did not spawn a child")
+            time.sleep(3.5)
+            self.assertFalse(marker.exists(), "Successful consumer left a live descendant")
 
 
 if __name__ == "__main__":
