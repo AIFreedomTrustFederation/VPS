@@ -51,8 +51,20 @@
           "run": "bash -n scripts/aift-heartbeat.sh && python3 tests/test-heartbeat.py"
         },
         {
-          "name": "Verify clean checkout",
-          "run": "test -z \"$(git status --porcelain)\""
+          "name": "Regression: checkout commit binding",
+          "run": "python3 -B -m unittest discover -s tests -p 'test_local_qa_commit_binding.py' -v"
+        },
+        {
+          "name": "Verify dashboard Docker context excludes credentials",
+          "run": "docker info >/dev/null && python3 -B tests/test-dashboard-docker-context.py -v"
+        },
+        {
+          "name": "Regression: combined QA safeguards",
+          "run": "python3 -B -m unittest discover -s tests -p 'test_vps_qa_dual_controls.py' -v"
+        },
+        {
+          "name": "Verify checkout and execution SHA",
+          "run": "set -euo pipefail\ntest -n \"${GITHUB_SHA:-}\"\nactual=\"$(git rev-parse HEAD)\"\ntest \"$actual\" = \"$GITHUB_SHA\"\nstatus=\"$(git status --porcelain --untracked-files=normal)\"\ntest -z \"$status\""
         }
       ]
     }
