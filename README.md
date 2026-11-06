@@ -104,6 +104,8 @@ process responding on the port, remote reachability, signed node identity,
 or successful provider enrollment. The separate `aift-node-card.sh` export
 and import formats are not covered by this heartbeat validation.
 
+**Node-agent installer credential-file boundary:** [The root-run installer](scripts/install-node-agent.sh) writes `AIFT_NODE_TOKEN` into `${AIFT_ROOT}/node-agent/.env` with `cat >`, without setting a restrictive umask or enforcing a private file mode. Under a typical `022` umask, a newly created file can be `0644`; rewriting an existing permissive file can preserve that mode, and a pre-existing `.env` symlink can redirect the root write. [AIFT Local QA](.github/workflows/aift-local-qa.yml) does not execute this installer or verify its credential-file permissions. This is a source-level local credential-exposure risk, **not** evidence of an actual leak or production deployment. Inspect file ownership, permissions, and symlink state before using real credentials; [PR #10](https://github.com/AIFreedomTrustFederation/VPS/pull/10) proposes a separate implementation repair that is not active on `main`.
+
 The node refresh helper, `bash scripts/aift-git-refresh.sh`, stages a replacement
 clone before moving a preexisting non-Git node directory to a timestamped
 backup. If cloning fails, the original node directory remains in place.
