@@ -51,6 +51,10 @@
           "run": "bash -n scripts/aift-heartbeat.sh && python3 tests/test-heartbeat.py"
         },
         {
+          "name": "Verify dashboard Docker context excludes credentials",
+          "run": "docker info >/dev/null && python3 -B tests/test-dashboard-docker-context.py -v"
+        },
+        {
           "name": "Verify clean checkout",
           "run": "test -z \"$(git status --porcelain)\""
         }
