@@ -1,0 +1,41 @@
+# Exclude local credentials and generated files from the dashboard build context.
+# Dockerfile uses COPY . .; Git's .gitignore does not constrain Docker context.
+.git
+**/.git
+node_modules
+**/node_modules
+.next
+**/.next
+out
+**/out
+coverage
+**/coverage
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+**/*.pem
+*.key
+**/*.key
+*.p12
+**/*.p12
+*.pfx
+**/*.pfx
+.npmrc
+**/.npmrc
+npm-debug.log*
+**/npm-debug.log*
+yarn-debug.log*
+**/yarn-debug.log*
+pnpm-debug.log*
+**/pnpm-debug.log*
+# Exclude credential directories and common signing keys at any depth.
+.ssh
+**/.ssh
+.aws
+**/.aws
+.kube
+**/.kube
+*.p8
+**/*.p8
