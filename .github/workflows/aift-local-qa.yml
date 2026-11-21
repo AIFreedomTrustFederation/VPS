@@ -51,12 +51,12 @@
           "run": "bash -n scripts/aift-heartbeat.sh && python3 tests/test-heartbeat.py"
         },
         {
-          "name": "Regression: checkout commit binding",
-          "run": "python3 -B -m unittest discover -s tests -p 'test_local_qa_commit_binding.py' -v"
-        },
-        {
           "name": "Verify dashboard Docker context excludes credentials",
           "run": "docker info >/dev/null && python3 -B tests/test-dashboard-docker-context.py -v"
+        },
+        {
+          "name": "Regression: checkout commit binding",
+          "run": "python3 -B -m unittest discover -s tests -p 'test_local_qa_commit_binding.py' -v"
         },
         {
           "name": "Regression: combined QA safeguards",
