@@ -56,6 +56,33 @@ class AetherionPreflightTests(unittest.TestCase):
         self.assertEqual(packet["response_format"]["type"], "json_schema")
         self.assertEqual(packet["response_format"]["json_schema"]["schema"], probe.SCHEMA)
         self.assertEqual(req.call_args.args[:3], (11434, "POST", "/v1/chat/completions"))
+        self.assertIn("CURRENT MARKDOWN:", packet["messages"][1]["content"])
+        self.assertIn(probe.SAMPLE_ORIGINAL, packet["messages"][1]["content"])
+        self.assertIn(probe.SAMPLE_INSTRUCTION, packet["messages"][1]["content"])
+        self.assertIn("exactly once", packet["messages"][0]["content"])
+        self.assertEqual(packet["max_tokens"], 3500)
+
+    def test_exact_whole_line_replacement_is_equivalent(self):
+        self.assertEqual(probe.apply_sample_replacement({
+            "old": "AIFT performs local checks.",
+            "new": "AIFT performs local verification.",
+            "summary": "One complete line replaced",
+        }), probe.SAMPLE_EXPECTED)
+
+    def test_sample_replacement_rejects_wrong_content_or_multiple_spans(self):
+        invalid = [
+            {"old": "local checks", "new": "local check", "summary": "x"},
+            {"old": "missing", "new": "new", "summary": "x"},
+            {"old": "local checks", "new": "local checks", "summary": "x"},
+            {"old": "local checks", "new": "local verification\nextra", "summary": "x"},
+            {"old": "local checks", "new": "local verification", "summary": "x",
+             "added": "other material"},
+            {"old": "", "new": "local verification", "summary": "x"},
+            {"old": "local checks", "new": "local verification", "summary": ""},
+        ]
+        for proposed in invalid:
+            with self.subTest(proposed=proposed), self.assertRaises(probe.ProbeError):
+                probe.apply_sample_replacement(proposed)
 
     def test_structured_probe_fails_for_invalid_or_extra_edit(self):
         invalid = [
