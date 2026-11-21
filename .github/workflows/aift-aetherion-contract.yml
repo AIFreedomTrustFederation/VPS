@@ -1,0 +1,57 @@
+{
+  "name": "AIFT Aetherion Node Contract",
+  "on": {
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        "scripts/aift-aetherion-preflight.py",
+        "tests/test-aetherion-preflight.py",
+        "tests/test-aetherion-compose.py",
+        "ops/aetherion/compose.yml",
+        ".github/workflows/aift-aetherion-contract.yml"
+      ]
+    },
+    "pull_request": {
+      "paths": [
+        "scripts/aift-aetherion-preflight.py",
+        "tests/test-aetherion-preflight.py",
+        "tests/test-aetherion-compose.py",
+        "ops/aetherion/compose.yml",
+        ".github/workflows/aift-aetherion-contract.yml"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "aetherion-contract-${{ github.workflow }}-${{ github.ref }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "offline-contract": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 5,
+      "steps": [
+        {
+          "name": "Check out exact source",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Verify Aetherion runtime evidence and isolation",
+          "run": "python3 -B tests/test-aetherion-preflight.py -v && python3 -B tests/test-aetherion-compose.py -v"
+        },
+        {
+          "name": "Verify source revision and clean checkout",
+          "shell": "bash",
+          "run": "set -euo pipefail\ntest -n \"${GITHUB_SHA:-}\"\ntest \"$(git rev-parse HEAD)\" = \"$GITHUB_SHA\"\ngit diff --check\ntest -z \"$(git status --porcelain --untracked-files=normal)\""
+        }
+      ]
+    }
+  }
+}
