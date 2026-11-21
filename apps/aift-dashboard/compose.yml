@@ -17,8 +17,8 @@ services:
       AIFT_DEPLOYMENTS_PATH: /opt/aift/registry/deployments.yml
       AIFT_LOG_PATH: /opt/aift/logs
       AIFT_USER_SECRETS_PATH: /opt/aift/secrets/users
-      AIFT_DASHBOARD_TOKEN: ${AIFT_DASHBOARD_TOKEN:-change-this-dashboard-token}
-      AIFT_NODE_TOKEN: ${AIFT_NODE_TOKEN:-change-this-node-token}
+      AIFT_DASHBOARD_TOKEN: ${AIFT_DASHBOARD_TOKEN:-}
+      AIFT_NODE_TOKEN: ${AIFT_NODE_TOKEN:-}
       COOLIFY_URL: ${COOLIFY_URL:-}
       COOLIFY_API_TOKEN: ${COOLIFY_API_TOKEN:-}
     volumes:
