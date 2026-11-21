@@ -104,6 +104,8 @@ process responding on the port, remote reachability, signed node identity,
 or successful provider enrollment. The separate `aift-node-card.sh` export
 and import formats are not covered by this heartbeat validation.
 
+**Node-agent installer credential-file boundary:** [The root-run installer](scripts/install-node-agent.sh) writes `AIFT_NODE_TOKEN` into `${AIFT_ROOT}/node-agent/.env` with `cat >`, without setting a restrictive umask or enforcing a private file mode. Under a typical `022` umask, a newly created file can be `0644`; rewriting an existing permissive file can preserve that mode, and a pre-existing `.env` symlink can redirect the root write. [AIFT Local QA](.github/workflows/aift-local-qa.yml) does not execute this installer or verify its credential-file permissions. This is a source-level local credential-exposure risk, **not** evidence of an actual leak or production deployment. Inspect file ownership, permissions, and symlink state before using real credentials; [PR #10](https://github.com/AIFreedomTrustFederation/VPS/pull/10) proposes a separate implementation repair that is not active on `main`.
+
 The node refresh helper, `bash scripts/aift-git-refresh.sh`, stages a replacement
 clone before moving a preexisting non-Git node directory to a timestamped
 backup. If cloning fails, the original node directory remains in place.
@@ -141,6 +143,8 @@ against concurrent port replacement. Inspect the candidate logs and actual
 public router health before treating a production promotion as verified.
 
 **Blue/green health-status boundary:** [The candidate probe](scripts/aift-bluegreen-sync.sh) accepts HTTP 200 from `/api/health`, but [the endpoint](apps/aift-dashboard/app/api/health/route.ts) also returns HTTP 200 with `ok: true` when its overall status is `warning`. [The health checks](apps/aift-dashboard/lib/health.ts) can report `warning` for missing registry files or unset tokens. Consequently, the blue/green script can promote a candidate with unresolved configuration warnings. Inspect the JSON `status` and individual `checks`, and independently verify credentials and service behavior before treating promotion as operational readiness.
+
+**Dashboard feature-readiness boundary:** [The `/api/readiness` handler](apps/aift-dashboard/app/api/readiness/route.ts) returns `ok: true` and assigns `ready` to GitHub source intake and app-profile generation without running either operation. Its workspace-preparation status checks only whether a `workspaces` directory exists. These status labels do not independently verify source retrieval, profile generation, workspace synchronization, build execution, or a reachable service. Confirm operation-specific logs, artifacts, and route behavior before claiming operational readiness, consistent with the [production-readiness rules](docs/production-readiness-rules.md).
 
 ### What the default CI run actually verifies
 
