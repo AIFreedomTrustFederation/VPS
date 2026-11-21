@@ -17,6 +17,16 @@ The constitutional reason for that work comes from the [One Eternal Scroll of AL
 
 ---
 
+## Aetherion provider-node implementation candidate
+
+The [Aetherion node-host runbook](docs/aetherion-node-host.md) provides an opt-in,
+loopback-only Ollama service profile and a read-only, JSON-evidenced provider
+preflight. This is **not a deployed VPS**, model import, GitHub runner, or
+production readiness claim. Review real host capacity, security isolation and
+CI before authorizing a launch.
+
+---
+
 ## Book I — Infrastructure as Stewardship
 
 Infrastructure becomes trustworthy when availability does not require invisibility. The user should be able to know where an application runs, which node is serving it, what health evidence justified the route, what record identifies the deployment, and what fallback path exists when a node fails.
