@@ -55,7 +55,7 @@ test('offline fallback is self-contained and explicitly does not claim native OS
   assert.match(html, /No hosted or native OS service is implied/i);
   assert.doesNotMatch(html, /<script\b/i);
   assert.match(html, /Retry connection/);
-  assert.ok(html.includes('href="http://127.0.0.1:3001/"'));
+  assert.ok(html.includes('href="http://127.0.0.1:3001"'), 'retry targets the exact configured default runtime URL');
   assert.match(html, /prefers-reduced-motion:reduce/);
   assert.match(html, /:focus-visible/);
   assert.match(html, /role="status"/);
