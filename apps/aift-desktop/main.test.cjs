@@ -9,8 +9,9 @@ function boot({ failInitial = false, platform = 'linux', nodeUrl } = {}) {
   const calls = [];
   const handlers = new Map();
   let windowOpenHandler;
+  const webEvents = new Map();
   class BrowserWindow {
-    constructor(options) { this.options = options; this.webContents = { setWindowOpenHandler(fn) { windowOpenHandler = fn; } }; }
+    constructor(options) { this.options = options; this.webContents = { setWindowOpenHandler(fn) { windowOpenHandler = fn; }, on(name, fn) { webEvents.set(name, fn); } }; }
     loadURL(url) {
       calls.push(['loadURL', url]);
       return failInitial && calls.filter(c => c[0] === 'loadURL').length === 1
@@ -33,7 +34,7 @@ function boot({ failInitial = false, platform = 'linux', nodeUrl } = {}) {
     URL,
     encodeURIComponent,
   }, { filename: 'main.cjs' });
-  return { calls, handlers, open: url => windowOpenHandler({ url }) };
+  return { calls, handlers, open: url => windowOpenHandler({ url }), navigate: url => { let prevented = false; const handler = webEvents.get('will-navigate'); if (handler) handler({ preventDefault() { prevented = true; } }, url); return prevented; } };
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -82,4 +83,17 @@ test('offline retry preserves configured node URL and HTML-escapes query paramet
   const html = decodeURIComponent(fallback.split(',').slice(1).join(','));
   assert.ok(html.includes('href="http://127.0.0.1:4178/?mode=local&amp;session=one"'));
   assert.equal(b.handlers.get('aift:getNodeUrl')(), nodeUrl);
+});
+
+test('offline retry is intercepted by the main process and reloads the exact configured runtime', async () => {
+  const nodeUrl = 'http://127.0.0.1:4178/?mode=local&session=one';
+  const b = boot({ failInitial: true, nodeUrl });
+  await flush();
+  assert.equal(b.calls.length, 2, 'initial failure shows one fallback');
+  assert.equal(b.navigate('https://example.com'), true, 'fallback rejects unrelated navigation');
+  assert.equal(b.calls.length, 2, 'unrelated navigation never loads');
+  assert.equal(b.navigate(nodeUrl), true, 'retry navigation is handled by main process');
+  await flush();
+  assert.equal(b.calls[2][1], nodeUrl, 'retry reloads the configured runtime');
+  assert.equal(b.navigate('https://example.com'), false, 'normal runtime navigation is not mistaken for fallback');
 });
