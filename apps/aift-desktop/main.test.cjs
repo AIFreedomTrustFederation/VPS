@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function boot({ failInitial = false, platform = 'linux' } = {}) {
+function boot({ failInitial = false, platform = 'linux', nodeUrl } = {}) {
   const calls = [];
   const handlers = new Map();
   let windowOpenHandler;
@@ -28,7 +28,7 @@ function boot({ failInitial = false, platform = 'linux' } = {}) {
       if (name === 'electron') return { app, BrowserWindow, shell, ipcMain };
       throw new Error('unexpected module: ' + name);
     },
-    process: { env: {}, platform },
+    process: { env: nodeUrl ? { AIFT_DESKTOP_URL: nodeUrl } : {}, platform },
     console,
     URL,
     encodeURIComponent,
@@ -70,4 +70,16 @@ test('external navigation permits HTTPS only and never opens insecure schemes', 
   assert.equal(b.open('javascript:alert(1)').action, 'deny');
   assert.equal(b.open('https://example.com').action, 'deny');
   assert.deepEqual(b.calls.filter(c => c[0] === 'external'), [['external', 'https://example.com']]);
+});
+
+
+test('offline retry preserves configured node URL and HTML-escapes query parameters', async () => {
+  const nodeUrl = 'http://127.0.0.1:4178/?mode=local&session=one';
+  const b = boot({ failInitial: true, nodeUrl });
+  await flush();
+  assert.equal(b.calls[0][1], nodeUrl);
+  const fallback = b.calls[1][1];
+  const html = decodeURIComponent(fallback.split(',').slice(1).join(','));
+  assert.ok(html.includes('href="http://127.0.0.1:4178/?mode=local&amp;session=one"'));
+  assert.equal(b.handlers.get('aift:getNodeUrl')(), nodeUrl);
 });
