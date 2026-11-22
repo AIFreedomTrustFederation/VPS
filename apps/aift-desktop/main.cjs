@@ -24,9 +24,23 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  win.loadURL(DEFAULT_NODE_URL).catch(() => {
-    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(FALLBACK_HTML)}`);
+  // A data: recovery page has no privileged bridge. Handle its exact retry
+  // destination in the main process, and refuse other fallback navigation.
+  let recoveryVisible = false;
+  const showFallback = () => {
+    recoveryVisible = true;
+    return win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(FALLBACK_HTML)}`);
+  };
+  const loadRuntime = () => {
+    recoveryVisible = false;
+    return win.loadURL(DEFAULT_NODE_URL).catch(showFallback);
+  };
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!recoveryVisible) return;
+    event.preventDefault();
+    if (url === DEFAULT_NODE_URL) loadRuntime();
   });
+  loadRuntime();
 
   return win;
 }
