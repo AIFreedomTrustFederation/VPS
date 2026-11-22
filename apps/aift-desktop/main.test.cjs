@@ -55,11 +55,11 @@ test('offline fallback is self-contained and explicitly does not claim native OS
   assert.match(html, /No hosted or native OS service is implied/i);
   assert.doesNotMatch(html, /<script\b/i);
   assert.match(html, /Retry connection/);
-  assert.match(html, /href="http:\/\/127\\.0\\.0\\.1:3001\//);
+  assert.ok(html.includes('href="http://127.0.0.1:3001/"'));
   assert.match(html, /prefers-reduced-motion:reduce/);
   assert.match(html, /:focus-visible/);
   assert.match(html, /role="status"/);
-  assert.doesNotMatch(html, /<iframe\\b|https:\/\//i);
+  assert.ok(!html.includes("<iframe") && !html.includes("https://"));
 });
 
 test('external navigation permits HTTPS only and never opens insecure schemes', async () => {
