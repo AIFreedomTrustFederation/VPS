@@ -10,11 +10,9 @@
     "test": "node --test main.test.cjs",
     "smoke": "electron smoke-electron.cjs"
   },
-  "dependencies": {
-    "electron": "^38.0.0"
-  },
   "devDependencies": {
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "electron": "^38.0.0"
   },
   "build": {
     "appId": "org.aifreedomtrust.aiftcloud",
