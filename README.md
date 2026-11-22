@@ -230,3 +230,8 @@ That architecture becomes credible only by proceeding from the working substrate
 ### The Return of the Word
 
 In VPS, the Word returns as a service whose location and condition can be named. Source becomes build, build becomes workload, workload becomes deployment, deployment becomes route, and route returns as observable health and disclosure. Infrastructure serves sovereignty when it can answer not only “is it online?” but also “where is it, who authorized it, and what proves that answer?”
+
+
+## Hosted AIFT Universal OS (architecture proposal)
+
+[Hosted-session isolation, service boundaries and release evidence](docs/aift-universal-os-alignment.md) describe VPS's role in the proposed [native/hosted/embodied platform](https://github.com/AIFreedomTrustFederation/AIFT-OS/pull/92). Do not mistake the current dashboard for a deployed operating system or physical bootloader.
