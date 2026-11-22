@@ -1,0 +1,114 @@
+{
+  "name": "AIFT Desktop Acceptance (Electron + Windows package)",
+  "on": {
+    "pull_request": {
+      "paths": [
+        "apps/aift-desktop/**",
+        ".github/workflows/aift-desktop-acceptance.yml"
+      ]
+    },
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "desktop-acceptance-${{ github.workflow }}-${{ github.ref }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "linux-electron-smoke": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "name": "Checkout exact PR code",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use Node.js 22",
+          "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+          "with": {
+            "node-version": 22
+          }
+        },
+        {
+          "name": "Install desktop dependencies (no lockfile exists)",
+          "run": "npm install --prefix apps/aift-desktop --workspaces=false --no-package-lock --no-audit --no-fund"
+        },
+        {
+          "name": "Run desktop unit tests",
+          "run": "npm --prefix apps/aift-desktop test"
+        },
+        {
+          "name": "Exercise genuine offline -> retry -> local connected Electron window",
+          "run": "xvfb-run -a npm --prefix apps/aift-desktop run smoke",
+          "env": {
+            "AIFT_DESKTOP_SMOKE_OUTPUT": "${{ runner.temp }}/desktop-smoke"
+          }
+        },
+        {
+          "name": "Retain screenshots as non-release verification evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "desktop-electron-smoke-screenshots",
+            "path": "${{ runner.temp }}/desktop-smoke/*.png",
+            "if-no-files-found": "warn",
+            "retention-days": 7
+          }
+        }
+      ]
+    },
+    "windows-package": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 30,
+      "env": {
+        "CSC_IDENTITY_AUTO_DISCOVERY": "false"
+      },
+      "steps": [
+        {
+          "name": "Checkout exact PR code",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use Node.js 22",
+          "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+          "with": {
+            "node-version": 22
+          }
+        },
+        {
+          "name": "Install desktop dependencies (no lockfile exists)",
+          "run": "npm install --prefix apps/aift-desktop --workspaces=false --no-package-lock --no-audit --no-fund"
+        },
+        {
+          "name": "Build unsigned NSIS and portable artifacts",
+          "run": "npm --prefix apps/aift-desktop run build:win"
+        },
+        {
+          "name": "Check both Windows artifacts and capture SHA-256 evidence",
+          "shell": "pwsh",
+          "run": "$items = @(Get-ChildItem -Path 'apps/aift-desktop/dist' -Filter '*.exe' -File)\nif ($items.Count -lt 2) { throw 'Expected both NSIS and portable .exe artifacts' }\nif (-not ($items | Where-Object { $_.Name -match 'Setup' })) { throw 'NSIS Setup .exe is missing' }\n$items | ForEach-Object { \"$($_.Name) $((Get-FileHash -Algorithm SHA256 $_.FullName).Hash)\" } | Set-Content 'apps/aift-desktop/dist/packaging-evidence.txt'\nGet-Content 'apps/aift-desktop/dist/packaging-evidence.txt'"
+        },
+        {
+          "name": "Retain hashes only, not unsigned installers",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "desktop-windows-package-hashes",
+            "path": "apps/aift-desktop/dist/packaging-evidence.txt",
+            "if-no-files-found": "warn",
+            "retention-days": 7
+          }
+        }
+      ]
+    }
+  }
+}
