@@ -6,7 +6,8 @@
   "main": "main.cjs",
   "scripts": {
     "dev": "electron .",
-    "build:win": "electron-builder --win nsis portable"
+    "build:win": "electron-builder --win nsis portable",
+    "test": "node --test main.test.cjs"
   },
   "dependencies": {
     "electron": "^38.0.0"
