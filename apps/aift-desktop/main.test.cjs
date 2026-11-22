@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function boot({ failInitial = false, platform = 'linux', nodeUrl } = {}) {
+function boot({ failInitial = false, platform = 'linux', nodeUrl, trustedOrigin } = {}) {
   const calls = [];
   const handlers = new Map();
   let windowOpenHandler;
@@ -29,7 +29,7 @@ function boot({ failInitial = false, platform = 'linux', nodeUrl } = {}) {
       if (name === 'electron') return { app, BrowserWindow, shell, ipcMain };
       throw new Error('unexpected module: ' + name);
     },
-    process: { env: nodeUrl ? { AIFT_DESKTOP_URL: nodeUrl } : {}, platform },
+    process: { env: { ...(nodeUrl ? { AIFT_DESKTOP_URL: nodeUrl } : {}), ...(trustedOrigin ? { AIFT_DESKTOP_TRUSTED_HTTPS_ORIGIN: trustedOrigin } : {}) }, platform },
     console,
     URL,
     encodeURIComponent,
@@ -96,4 +96,27 @@ test('offline retry is intercepted by the main process and reloads the exact con
   await flush();
   assert.equal(b.calls[2][1], nodeUrl, 'retry reloads the configured runtime');
   assert.equal(b.navigate('https://example.com'), false, 'normal runtime navigation is not mistaken for fallback');
+});
+
+test('refuses untrusted remote, credentialed, and non-HTTP(S) runtime URLs before opening windows', () => {
+  for (const nodeUrl of [
+    'https://example.com/app', 'http://example.com/app', 'file:///etc/passwd',
+    'javascript:alert(1)', 'http://user:password@127.0.0.1:3001/',
+    'http://127.0.0.1:3001/#fragment', 'http://127.0.0.1:3001/\n',
+  ]) {
+    assert.throws(() => boot({ nodeUrl }), /AIFT_DESKTOP_URL/, `must refuse ${nodeUrl}`);
+  }
+});
+
+test('accepts loopback IPv6 and localhost, but remote HTTPS requires exact trusted origin', async () => {
+  for (const nodeUrl of ['http://localhost:4178/', 'http://[::1]:4178/', 'https://127.0.0.1:4178/']) {
+    const b = boot({ nodeUrl });
+    await flush();
+    assert.equal(b.calls[0][1], nodeUrl);
+  }
+  assert.throws(() => boot({ nodeUrl: 'https://other.example/app', trustedOrigin: 'https://example.com' }), /trusted HTTPS origin/);
+  assert.throws(() => boot({ nodeUrl: 'https://example.com/app', trustedOrigin: 'http://example.com' }), /trusted HTTPS origin/);
+  const b = boot({ nodeUrl: 'https://example.com/app', trustedOrigin: 'https://example.com' });
+  await flush();
+  assert.equal(b.calls[0][1], 'https://example.com/app');
 });
