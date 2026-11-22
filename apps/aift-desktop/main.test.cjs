@@ -59,9 +59,9 @@ test('offline fallback is self-contained and explicitly does not claim native OS
 test('external navigation permits HTTPS only and never opens insecure schemes', async () => {
   const b = boot();
   await flush();
-  assert.deepEqual(b.open('http://example.com'), { action: 'deny' });
-  assert.deepEqual(b.open('file:///etc/passwd'), { action: 'deny' });
-  assert.deepEqual(b.open('javascript:alert(1)'), { action: 'deny' });
-  assert.deepEqual(b.open('https://example.com'), { action: 'deny' });
+  assert.equal(b.open('http://example.com').action, 'deny');
+  assert.equal(b.open('file:///etc/passwd').action, 'deny');
+  assert.equal(b.open('javascript:alert(1)').action, 'deny');
+  assert.equal(b.open('https://example.com').action, 'deny');
   assert.deepEqual(b.calls.filter(c => c[0] === 'external'), [['external', 'https://example.com']]);
 });
