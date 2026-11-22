@@ -1,7 +1,7 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
-const path = require('path');
 
 const DEFAULT_NODE_URL = process.env.AIFT_DESKTOP_URL || 'http://127.0.0.1:3001';
+const FALLBACK_HTML = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AIFT Cloud offline</title><body style="font:16px system-ui;background:#07111f;color:#fff;padding:3rem"><h1>AIFT Cloud</h1><p>The local AIFT node is not responding. Start the local runtime, then restart the desktop app.</p><p>No hosted or native OS service is implied by this screen.</p></body></html>`;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -12,7 +12,6 @@ function createWindow() {
     title: 'AIFT Cloud',
     backgroundColor: '#07111f',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -20,12 +19,12 @@ function createWindow() {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
   win.loadURL(DEFAULT_NODE_URL).catch(() => {
-    win.loadFile(path.join(__dirname, 'fallback.html'));
+    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(FALLBACK_HTML)}`);
   });
 
   return win;
