@@ -1,0 +1,32 @@
+[Unit]
+Description=AIFT Aetherion local inference provider
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=aetherion
+Group=aetherion
+WorkingDirectory=/var/lib/aetherion
+EnvironmentFile=/etc/aift/aetherion.env
+ExecStart=/usr/local/bin/llama-server --model ${AIFT_MODEL_PATH} --host 127.0.0.1 --port 8080 --ctx-size 2048 --parallel 1 --threads 2
+Restart=on-failure
+RestartSec=15s
+TimeoutStopSec=30s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadOnlyPaths=/var/lib/aetherion
+MemoryMax=5G
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target
