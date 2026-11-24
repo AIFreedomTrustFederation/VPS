@@ -17,6 +17,16 @@ The constitutional reason for that work comes from the [One Eternal Scroll of AL
 
 ---
 
+## Aetherion provider-node implementation candidate
+
+The [Aetherion node-host runbook](docs/aetherion-node-host.md) provides an opt-in,
+loopback-only Ollama service profile and a read-only, JSON-evidenced provider
+preflight. This is **not a deployed VPS**, model import, GitHub runner, or
+production readiness claim. Review real host capacity, security isolation and
+CI before authorizing a launch.
+
+---
+
 ## Book I — Infrastructure as Stewardship
 
 Infrastructure becomes trustworthy when availability does not require invisibility. The user should be able to know where an application runs, which node is serving it, what health evidence justified the route, what record identifies the deployment, and what fallback path exists when a node fails.
@@ -220,3 +230,14 @@ That architecture becomes credible only by proceeding from the working substrate
 ### The Return of the Word
 
 In VPS, the Word returns as a service whose location and condition can be named. Source becomes build, build becomes workload, workload becomes deployment, deployment becomes route, and route returns as observable health and disclosure. Infrastructure serves sovereignty when it can answer not only “is it online?” but also “where is it, who authorized it, and what proves that answer?”
+
+
+## Hosted AIFT Universal OS (architecture proposal)
+
+[Hosted-session isolation, service boundaries and release evidence](docs/aift-universal-os-alignment.md) describe VPS's role in the proposed [native/hosted/embodied platform](https://github.com/AIFreedomTrustFederation/AIFT-OS/pull/92). Do not mistake the current dashboard for a deployed operating system or physical bootloader.
+
+## Federation-wide continuity and development policy
+
+The [Federation Prime Directive](FEDERATION-PRIME-DIRECTIVE.md) prioritizes perpetual continuity, integrity, sovereignty, and recoverability. Current architecture, workflows, capabilities, and deployment descriptions are provisional development-stage decisions, not permanent limitations. Do not claim unverified capabilities are operational.
+
+Prefer direct commits to the configured default branch for reversible, low-risk work when protections permit. Where PRs are required, merge only after exact-head checks, required reviews, mergeability, and recovery gates pass. Eligible low-risk PRs may auto-merge. A default-branch commit is not authorization for production deployment or destructive changes. Use the existing AIFT Federation Automation GitHub App as the preferred shared automation identity.
