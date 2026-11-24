@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { spawnSync } from 'child_process';
 import { NextRequest, NextResponse } from 'next/server';
+import { childProcessEnv, guardLocalExecRoute } from '@/lib/local-exec';
 import { readEngineRecords, upsertEngineRecord } from '@/lib/engine-records';
 import { writeLocalActionLog } from '@/lib/local-action-log';
 
@@ -31,6 +32,9 @@ function installCommand(packageManager: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = guardLocalExecRoute(request);
+  if (blocked) return blocked;
+
   const body = await request.json().catch(() => ({}));
   const profileId = typeof body.profileId === 'string' ? body.profileId : '';
 
@@ -57,7 +61,8 @@ export async function POST(request: NextRequest) {
     cwd: workspace,
     encoding: 'utf8',
     timeout: 300000,
-    env: process.env,
+    // Install scripts from the cloned repo run here; give them a minimal env, not the dashboard's secrets.
+    env: childProcessEnv(),
   });
 
   const terminal = [`$ ${command.cmd} ${command.args.join(' ')}`, result.stdout || '', result.stderr || ''].filter(Boolean).join('\n');

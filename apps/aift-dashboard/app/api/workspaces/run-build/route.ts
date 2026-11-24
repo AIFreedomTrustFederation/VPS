@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { spawnSync } from 'child_process';
 import { NextRequest, NextResponse } from 'next/server';
+import { childProcessEnv, guardLocalExecRoute } from '@/lib/local-exec';
 import { readEngineRecords, upsertEngineRecord } from '@/lib/engine-records';
 import { writeLocalActionLog } from '@/lib/local-action-log';
 
@@ -14,6 +15,9 @@ function commandFor(manager: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = guardLocalExecRoute(request);
+  if (blocked) return blocked;
+
   const body = await request.json().catch(() => ({}));
   const profileId = typeof body.profileId === 'string' ? body.profileId : '';
   const profile = readEngineRecords<Profile>('app-profiles').find((item) => item.id === profileId);
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
   if (!ready?.workspace_path || !existsSync(ready.workspace_path)) return NextResponse.json({ ok: false, error: 'Install dependencies before running build.' }, { status: 400 });
 
   const command = commandFor(profile.package_manager);
-  const result = spawnSync(command.cmd, command.args, { cwd: ready.workspace_path, encoding: 'utf8', timeout: 300000, env: process.env });
+  const result = spawnSync(command.cmd, command.args, { cwd: ready.workspace_path, encoding: 'utf8', timeout: 300000, env: childProcessEnv() });
   const terminal = [`$ ${command.cmd} ${command.args.join(' ')}`, result.stdout || '', result.stderr || ''].filter(Boolean).join('\n');
   const logPath = writeLocalActionLog(`build-${profile.source_id}`, terminal);
   const ok = result.status === 0;

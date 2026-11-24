@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardLocalExecRoute } from '@/lib/local-exec';
 import { addAppSource, readAppSources } from '@/lib/app-sources';
 
 export async function GET() {
@@ -10,6 +11,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = guardLocalExecRoute(request);
+  if (blocked) return blocked;
+
   const body = await request.json().catch(() => ({}));
   const url = typeof body.url === 'string' ? body.url : '';
   const result = addAppSource(url);
