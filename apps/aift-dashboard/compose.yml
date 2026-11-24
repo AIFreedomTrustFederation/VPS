@@ -6,7 +6,8 @@ services:
     container_name: aift-dashboard
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Loopback only: Docker-published ports bypass ufw. Put a TLS reverse proxy in front.
+      - "127.0.0.1:3000:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
@@ -21,6 +22,8 @@ services:
       AIFT_NODE_TOKEN: ${AIFT_NODE_TOKEN:-}
       COOLIFY_URL: ${COOLIFY_URL:-}
       COOLIFY_API_TOKEN: ${COOLIFY_API_TOKEN:-}
+      # Clone/install/build/run routes stay off in production unless set to 1.
+      AIFT_ENABLE_LOCAL_EXEC_ROUTES: ${AIFT_ENABLE_LOCAL_EXEC_ROUTES:-}
     volumes:
       - /opt/aift/registry:/opt/aift/registry
       - /opt/aift/logs:/opt/aift/logs
