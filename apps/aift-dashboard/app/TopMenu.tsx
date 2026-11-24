@@ -10,6 +10,7 @@ const nav = [
   ['Nodes', '/nodes'],
   ['Health', '/health'],
   ['Settings', '/settings'],
+  ['Sign in', '/login'],
 ];
 
 export function TopMenu() {

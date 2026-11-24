@@ -2,6 +2,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { NextRequest, NextResponse } from 'next/server';
+import { guardLocalExecRoute } from '@/lib/local-exec';
 import { writeLocalActionLog } from '@/lib/local-action-log';
 
 const actions = [
@@ -90,6 +91,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = guardLocalExecRoute(request);
+  if (blocked) return blocked;
+
   const body = await request.json().catch(() => ({}));
   const action = body.action as ActionId;
   if (!actions.some((item) => item.id === action)) {

@@ -46,6 +46,7 @@ export function WebAIChatClient() {
   const [models, setModels] = useState<WebAIModel[]>([]);
   const [selectedModel, setSelectedModel] = useState('aift-context-v0');
   const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState('');
 
   async function loadHistory() {
     const response = await fetch('/api/webai/conversations', { cache: 'no-store' });
@@ -90,9 +91,13 @@ export function WebAIChatClient() {
 
     if (response.ok) {
       const data = await response.json();
+      setNotice('');
       setActive(data.conversation);
       await loadHistory();
       await loadContext();
+    } else {
+      const data = await response.json().catch(() => ({}));
+      setNotice(data.error || `Message failed (${response.status}).`);
     }
 
     setSending(false);
@@ -165,6 +170,7 @@ export function WebAIChatClient() {
             rows={4}
           />
           <button type="submit" disabled={sending}>{sending ? 'Sending...' : 'Send'}</button>
+          {notice ? <p role="alert">{notice}</p> : null}
         </form>
 
         <div className="row-card"><strong>Next</strong><span>{context?.recommended_next_step ?? 'Load WebAI context.'}</span></div>

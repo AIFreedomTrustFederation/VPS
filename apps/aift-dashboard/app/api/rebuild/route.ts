@@ -3,14 +3,17 @@ import { requireApiAuth } from '@/lib/auth';
 import { triggerRebuild } from '@/lib/coolify';
 
 export async function POST(request: NextRequest) {
+  // Authenticate before reading the body, for JSON and form posts alike.
+  // Browser form posts authenticate with the /login session cookie.
+  const auth = requireApiAuth(request);
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+
   const contentType = request.headers.get('content-type') || '';
   let app = '';
 
   if (contentType.includes('application/json')) {
     const body = await request.json().catch(() => ({}));
     app = String(body.app || '');
-    const auth = requireApiAuth(request);
-    if (!auth.ok) return NextResponse.json(auth, { status: 401 });
   } else {
     const form = await request.formData();
     app = String(form.get('app') || '');

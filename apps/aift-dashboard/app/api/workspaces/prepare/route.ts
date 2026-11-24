@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { NextRequest, NextResponse } from 'next/server';
+import { childProcessEnv, guardLocalExecRoute } from '@/lib/local-exec';
 import { readEngineRecords, upsertEngineRecord } from '@/lib/engine-records';
 import { writeLocalActionLog } from '@/lib/local-action-log';
 
@@ -32,7 +33,8 @@ function run(cmd: string, args: string[], cwd: string) {
     cwd,
     encoding: 'utf8',
     timeout: 120000,
-    env: process.env,
+    // git only needs PATH/HOME/proxy settings; never hand it dashboard secrets.
+    env: childProcessEnv(),
   });
 }
 
@@ -59,6 +61,9 @@ function readSyncState(workspace: string, branch: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = guardLocalExecRoute(request);
+  if (blocked) return blocked;
+
   const body = await request.json().catch(() => ({}));
   const profileId = typeof body.profileId === 'string' ? body.profileId : '';
 
