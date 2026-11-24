@@ -62,7 +62,18 @@ def token_entry(text):
     return i, value
 
 
+def create_private_env(path, content):
+    # O_EXCL guarantees no clobber without depending on hardlink behavior under
+    # PRoot. A write failure leaves a private file for explicit operator review.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def provision(path):
+    existed = path.exists()
     text = read_env(path)
     index, value = token_entry(text)
     if value:
@@ -77,26 +88,28 @@ def provision(path):
         lines.append(entry)
     else:
         lines[index] = entry
-    # Only create/replace a private, deploy-user-owned file; never print its contents.
-    fd, temp = tempfile.mkstemp(prefix=".env.aift-", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write("".join(lines))
-            stream.flush()
-            os.fsync(stream.fileno())
-        if read_env(path) != text:
-            raise ValueError("env file changed concurrently")
-        if path.exists():
+    content = "".join(lines)
+    if not existed:
+        create_private_env(path, content)
+    else:
+        # Preserve atomic replacement for an existing, validated private file.
+        fd, temp = tempfile.mkstemp(prefix=".env.aift-", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            if not path.exists() or read_env(path) != text:
+                raise ValueError("env file changed concurrently")
             os.replace(temp, path)
-        else:
-            # Do not overwrite a file that appeared concurrently.
-            os.link(temp, path)
-            os.unlink(temp)
-    finally:
-        if os.path.exists(temp):
-            os.unlink(temp)
+        finally:
+            if os.path.exists(temp):
+                os.unlink(temp)
+    # Do not report success unless the final file satisfies the original
+    # ownership, link-count, regular-file and permission requirements.
+    if read_env(path) != content:
+        raise ValueError("created env file failed verification")
     return "generated-private-token"
-
 
 def inspect_runtime(dashboard):
     config = json.loads(command(["docker", "compose", "-f", "compose.yml", "config", "--format", "json"], dashboard))
@@ -176,8 +189,18 @@ class SelfTests(unittest.TestCase):
             original = p.read_text()
             self.assertTrue(strong(token_entry(original)[1]))
             self.assertEqual(stat.S_IMODE(p.stat().st_mode), 0o600)
+            self.assertEqual(p.stat().st_nlink, 1)
+            self.assertEqual(p.stat().st_uid, os.getuid())
             self.assertEqual(provision(p), "existing-token-preserved")
             self.assertEqual(p.read_text(), original)
+
+    def test_exclusive_create_never_overwrites(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p = Path(folder) / ".env"
+            create_private_env(p, "original\n")
+            with self.assertRaises(FileExistsError):
+                create_private_env(p, "replacement\n")
+            self.assertEqual(read_env(p), "original\n")
 
     def test_preserve_other_entries(self):
         with tempfile.TemporaryDirectory() as folder:
