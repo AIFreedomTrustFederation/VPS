@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Runner-side helpers for the VPS dashboard deploy workflows.
+#   gate            decide whether this run may deploy (VPS_DEPLOY_ENABLED must be exactly 'true')
 #   validate        check required configuration and shapes (names only, never values)
 #   resolve-target  choose the SHA to deploy; rollback SHAs must be ancestors of origin/main
 #   ssh-setup       write the SSH key and pinned known_hosts, require a matching host entry
@@ -26,6 +27,25 @@ port_of() {
   echo "${VPS_PORT:-22}"
 }
 
+cmd_gate() {
+  # Byte-exact, case-sensitive comparison in bash. GitHub expression '==' is
+  # case-insensitive, so the raw variable value is compared here instead.
+  local raw="${VPS_DEPLOY_ENABLED_RAW-}" event="${EVENT_NAME:-}" ref="${REF_FULL:-}" deploy=false
+  if [ "$raw" = "true" ] && [ "$ref" = "refs/heads/main" ]; then
+    case "$event" in push | workflow_dispatch) deploy=true ;; esac
+  fi
+  output deploy "$deploy"
+  if [ "$deploy" = "true" ]; then
+    echo "Deployment authorized for $event on $ref."
+    return 0
+  fi
+  if [ "$event" = "workflow_dispatch" ]; then
+    echo "::error::Manual deploy refused: repository variable VPS_DEPLOY_ENABLED must be exactly 'true' (lowercase, no spaces) and the run must be on refs/heads/main." >&2
+    exit 1
+  fi
+  echo "::notice::Deploy skipped: VPS_DEPLOY_ENABLED is not exactly 'true', the ref is not main, or this event never deploys."
+}
+
 cmd_validate() {
   local missing=() name
   for name in VPS_HOST VPS_USER VPS_SSH_KEY VPS_APP_PATH VPS_KNOWN_HOSTS; do
@@ -48,8 +68,16 @@ cmd_resolve_target() {
   if [ -n "$requested" ]; then
     [ "${EVENT_NAME:-}" = "workflow_dispatch" ] || fail "rollback is only available for manual runs"
     [[ "$requested" =~ ^[0-9a-f]{40}$ ]] || fail "rollback_sha must be a full 40-character lowercase hex SHA"
+    [ "$(git rev-parse --is-shallow-repository 2> /dev/null)" = "false" ] || fail "checkout is shallow; rollback ancestry cannot be verified"
+    git rev-parse --verify --quiet "refs/remotes/origin/main^{commit}" > /dev/null || fail "origin/main is not available to verify rollback_sha"
     git cat-file -e "${requested}^{commit}" 2> /dev/null || fail "rollback_sha is not a commit in this repository"
-    git merge-base --is-ancestor "$requested" refs/remotes/origin/main 2> /dev/null || fail "rollback_sha is not an ancestor of main"
+    local rc=0
+    git merge-base --is-ancestor "$requested" refs/remotes/origin/main 2> /dev/null || rc=$?
+    case "$rc" in
+      0) ;;
+      1) fail "rollback_sha is not an ancestor of main" ;;
+      *) fail "cannot verify that rollback_sha is an ancestor of main (git exit $rc)" ;;
+    esac
     sha="$requested"
     rollback=true
   fi
@@ -104,26 +132,46 @@ cmd_deploy() {
 }
 
 cmd_summarize() {
-  local out="${DEPLOY_OUTPUT:-deploy-output.log}" record_file="${DEPLOY_RECORD_FILE:-deployment-record.json}" summary="${GITHUB_STEP_SUMMARY:-/dev/null}" record
+  local out="${DEPLOY_OUTPUT:-deploy-output.log}" record_file="${DEPLOY_RECORD_FILE:-deployment-record.json}" summary="${GITHUB_STEP_SUMMARY:-/dev/null}" record suggestion
   record="$(grep '^AIFT_DEPLOY_RECORD ' "$out" 2> /dev/null | tail -n 1 | cut -d' ' -f2- || true)"
   {
     echo "### VPS dashboard deployment"
-    if [ -z "$record" ] || [[ "$record" == *'`'* ]]; then
-      echo "No provenance record was returned by the server (the deploy stopped before the server changed, or the connection failed)."
-    else
+    if [ -n "$record" ] && suggestion="$(python3 -c '
+import json, re, sys
+sha = re.compile(r"[0-9a-f]{40}")
+assert chr(96) not in sys.argv[1]
+record = json.loads(sys.argv[1])
+assert isinstance(record, dict)
+for key in ("deployed_sha", "previous_sha"):
+    assert sha.fullmatch(record[key]), key
+assert record["status"] in ("healthy", "unhealthy", "failed", "target_mismatch", "refused_downgrade", "refused_ancestry", "refused_rollback_target")
+last = record.get("last_healthy_before", "none")
+assert last == "none" or sha.fullmatch(last), "last_healthy_before"
+if record["status"] == "healthy":
+    print("none needed (deploy verified healthy)")
+elif last != "none":
+    print(last)
+else:
+    print(record["previous_sha"])
+' "$record" 2> /dev/null)"; then
       printf '%s\n' "$record" > "$record_file"
       echo '```json'
       echo "$record"
       echo '```'
+      echo ""
+      echo "Suggested rollback target (last known healthy): \`$suggestion\` (see docs/deploy-rollback.md)"
+    else
+      echo "No valid provenance record was returned by the server (the deploy stopped before the server changed, or the connection failed)."
     fi
   } >> "$summary"
 }
 
 case "${1:-}" in
+  gate) cmd_gate ;;
   validate) cmd_validate ;;
   resolve-target) cmd_resolve_target ;;
   ssh-setup) cmd_ssh_setup ;;
   deploy) cmd_deploy ;;
   summarize) cmd_summarize ;;
-  *) echo "usage: $0 validate|resolve-target|ssh-setup|deploy|summarize" >&2; exit 2 ;;
+  *) echo "usage: $0 gate|validate|resolve-target|ssh-setup|deploy|summarize" >&2; exit 2 ;;
 esac

@@ -8,7 +8,10 @@ production deploy job is gated.
 
 | Variable | Value | Purpose |
 | --- | --- | --- |
-| `VPS_DEPLOY_ENABLED` | exactly `true` | Authorizes production deploys. Any other value, or unset, means disabled. |
+| `VPS_DEPLOY_ENABLED` | exactly `true` | Authorizes production deploys. The check is exact and case-sensitive: `True`, `TRUE`, ` true`, `true ` (or a trailing newline), `1`, `yes` and unset all mean disabled. |
+
+The comparison runs in bash on the raw value, because GitHub expression `==` comparisons are
+case-insensitive. Pull request runs evaluate the gate but can never deploy.
 
 Set it under `Repo -> Settings -> Secrets and variables -> Actions -> Variables`. It must be a
 **repository** variable (the gate job does not use an environment, so an environment-level variable is
@@ -91,14 +94,26 @@ the `vps-dashboard-deploy` concurrency slot; the server also refuses to move a d
 ## What a deploy does
 
 1. Validates configuration, then the target SHA (the run's commit, or `rollback_sha`).
-2. Over pinned SSH, under `flock` on the server, in `VPS_APP_PATH`: refuses a dirty tree, fetches that
-   SHA, checks it out detached, verifies `HEAD`, rebuilds with `docker compose`.
+2. Over pinned SSH, under `flock` on the server, in `VPS_APP_PATH`: refuses a dirty or shallow
+   checkout, fetches that SHA and checks ancestry (fail-closed: a normal deploy must descend from the
+   deployed commit; a rollback must be an ancestor of `origin/main`; any `git merge-base` error
+   refuses), checks it out detached, verifies `HEAD`, and rebuilds with `docker compose`, passing the
+   SHA as the `AIFT_COMMIT_SHA` build arg (image label `org.opencontainers.image.revision`, and the
+   `commit` field of `/api/health`).
 3. Verifies health on the server's loopback (`http://127.0.0.1:3000/api/health`, matching the
    loopback-only port binding) with a bounded retry budget (30 attempts, 2 s apart, 5 s timeout each).
-   The job fails if the container is not running or the endpoint is not healthy in time.
-4. Appends a provenance record (deployed SHA, previous SHA, run id/URL, actor, UTC time, status) to
-   `/var/lib/aift/dashboard-deploys/deployments.jsonl` on the server, prints it in the job summary and
-   uploads it as the `vps-dashboard-deployment-record-<run id>` artifact.
+   The response is parsed as JSON with a strict schema (`python3` on the server is required): `ok` must
+   be the boolean `true`, `status` `healthy`/`warning`, `checked_at` and `checks` present, and `commit`
+   equal to the deployed SHA. Then the checkout `HEAD` and the container label must both equal the
+   SHA. Any failure fails the job.
+4. Appends a provenance record (deployed SHA, previous SHA, running commit, last-known-healthy before
+   the deploy, run id/URL, actor, UTC time, status) to
+   `/var/lib/aift/dashboard-deploys/deployments.jsonl` on the server, prints it in the job summary with
+   a suggested rollback target, and uploads it as the `vps-dashboard-deployment-record-<run id>`
+   artifact. Only a fully verified deploy updates `/var/lib/aift/dashboard-deploys/last-healthy-sha`.
+
+The server needs `git`, `docker` (with compose), `curl` and `python3`; a missing tool refuses the
+deploy before anything changes.
 
 Rollback procedures are in [`docs/deploy-rollback.md`](deploy-rollback.md).
 
