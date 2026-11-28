@@ -13,10 +13,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: vps-dashboard-deploy
-  cancel-in-progress: false
-
+# Build and verification run on every push and never depend on production
+# deployment authorization. Deployment is disabled unless the repository variable
+# VPS_DEPLOY_ENABLED is exactly 'true'. When it is enabled, a push run FAILS if
+# any required secret is missing; when it is disabled, a push run skips deploy
+# with a notice and a manual run fails. See docs/github-secrets.md.
 jobs:
   build-dashboard:
     runs-on: ubuntu-latest
@@ -95,122 +96,86 @@ jobs:
             ops/build-reports/latest-dashboard-build.md
             ops/build-reports/dashboard-build.log
 
-  deploy-dashboard:
+  deploy-gate:
     runs-on: ubuntu-latest
-    needs: build-dashboard
-    if: github.ref == 'refs/heads/main'
+    outputs:
+      deploy: ${{ steps.gate.outputs.deploy }}
     steps:
-      - name: Check deployment settings
-        id: deploy_settings
+      - name: Check deployment authorization
+        id: gate
         env:
-          VPS_HOST_VALUE: ${{ secrets.VPS_HOST }}
-          VPS_USER_VALUE: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY_VALUE: ${{ secrets.VPS_SSH_KEY }}
+          GATE_ENABLED: ${{ vars.VPS_DEPLOY_ENABLED == 'true' }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_FULL: ${{ github.ref }}
         run: |
-          if [ -n "$VPS_HOST_VALUE" ] && [ -n "$VPS_USER_VALUE" ] && [ -n "$VPS_SSH_KEY_VALUE" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Deployment skipped. Add VPS_HOST, VPS_USER, VPS_PORT, and VPS_SSH_KEY secrets."
+          set -Eeuo pipefail
+          if [ "$GATE_ENABLED" = "true" ] && [ "$REF_FULL" = "refs/heads/main" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "deploy=false" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "::error::Manual deploy refused: repository variable VPS_DEPLOY_ENABLED must be exactly 'true' and the run must be on refs/heads/main." >&2
+            exit 1
+          fi
+          echo "::notice::Deploy skipped: VPS_DEPLOY_ENABLED is not 'true' or the ref is not main."
+
+  deploy-dashboard:
+    needs: [build-dashboard, deploy-gate]
+    if: needs.deploy-gate.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: production
+      url: https://vps.aifreedomtrust.com
+    concurrency:
+      group: vps-dashboard-deploy
+      cancel-in-progress: false
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_APP_PATH: ${{ secrets.VPS_APP_PATH }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Validate deployment configuration
+        run: bash scripts/deploy-dashboard-runner.sh validate
+
+      - name: Resolve deploy target
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ROLLBACK_SHA: ''
+        run: bash scripts/deploy-dashboard-runner.sh resolve-target
 
       - name: Configure SSH
-        if: steps.deploy_settings.outputs.ready == 'true'
-        env:
-          VPS_SSH_KEY_VALUE: ${{ secrets.VPS_SSH_KEY }}
-          VPS_KNOWN_HOSTS_VALUE: ${{ secrets.VPS_KNOWN_HOSTS }}
-        run: |
-          set -Eeuo pipefail
-          if [ -z "${VPS_KNOWN_HOSTS_VALUE}" ]; then
-            echo "Refusing deployment: VPS_KNOWN_HOSTS secret is missing" >&2
-            exit 1
-          fi
-          mkdir -p ~/.ssh
-          umask 077
-          printf '%s\n' "$VPS_SSH_KEY_VALUE" > ~/.ssh/aift_vps_key
-          printf '%s\n' "$VPS_KNOWN_HOSTS_VALUE" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/aift_vps_key ~/.ssh/known_hosts
+        run: bash scripts/deploy-dashboard-runner.sh ssh-setup
 
       - name: Deploy to node one
-        if: steps.deploy_settings.outputs.ready == 'true'
+        id: deploy
         env:
-          VPS_HOST_VALUE: ${{ secrets.VPS_HOST }}
-          VPS_USER_VALUE: ${{ secrets.VPS_USER }}
-          VPS_PORT_VALUE: ${{ secrets.VPS_PORT }}
-          VPS_APP_PATH_VALUE: ${{ secrets.VPS_APP_PATH }}
-        run: |
-          set -Eeuo pipefail
-          APP_DIR="$VPS_APP_PATH_VALUE"
-          DEPLOY_SHA="$GITHUB_SHA"
-          if [ -z "$APP_DIR" ]; then
-            echo "Refusing deployment: VPS_APP_PATH secret is empty" >&2
-            exit 1
-          fi
-          if [[ ! "$APP_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
-            echo "Refusing deployment: VPS_APP_PATH must be an absolute path" >&2
-            exit 1
-          fi
-          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Refusing deployment: GITHUB_SHA is missing or not a 40-character hex SHA" >&2
-            exit 1
-          fi
-          ssh -i ~/.ssh/aift_vps_key \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-            -p "${VPS_PORT_VALUE:-22}" \
-            "$VPS_USER_VALUE@$VPS_HOST_VALUE" \
-            flock -w 1800 /var/lock/aift-dashboard-deploy.lock \
-            bash -s -- "$APP_DIR" "$DEPLOY_SHA" <<'EOF'
-          # begin-remote-deploy
-          set -Eeuo pipefail
-          APP_DIR="${1:-}"
-          DEPLOY_SHA="${2:-}"
-          if [ -z "$APP_DIR" ]; then
-            echo "Refusing deployment: VPS_APP_PATH is empty" >&2
-            exit 1
-          fi
-          if [ ! -d "$APP_DIR/.git" ]; then
-            echo "Refusing deployment: ${APP_DIR} is not a git repository" >&2
-            exit 1
-          fi
-          cd "$APP_DIR"
-          checkout_status=$(git status --porcelain --untracked-files=all) || {
-            echo "Refusing deployment: cannot inspect remote checkout" >&2
-            exit 1
-          }
-          if [ -n "$checkout_status" ]; then
-            echo "Refusing deployment: dirty checkout" >&2
-            exit 1
-          fi
-          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Refusing deployment: invalid commit SHA" >&2
-            exit 1
-          fi
-          git fetch origin -- "$DEPLOY_SHA" || {
-            echo "Refusing deployment: cannot fetch $DEPLOY_SHA from origin" >&2
-            exit 1
-          }
-          git checkout --detach "$DEPLOY_SHA"
-          if [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]; then
-            echo "Refusing deployment: remote revision differs from workflow commit $DEPLOY_SHA" >&2
-            exit 1
-          fi
-          checkout_status=$(git status --porcelain --untracked-files=all) || {
-            echo "Refusing deployment: cannot inspect remote checkout" >&2
-            exit 1
-          }
-          if [ -n "$checkout_status" ]; then
-            echo "Refusing deployment: dirty checkout at verified commit" >&2
-            exit 1
-          fi
-          # end-remote-deploy
-          mkdir -p /opt/aift/registry /opt/aift/logs /opt/aift/secrets
-          [ -f /opt/aift/registry/nodes.yml ] || cp registry-examples/nodes.yml /opt/aift/registry/nodes.yml
-          [ -f /opt/aift/registry/templates.yml ] || cp registry-examples/templates.yml /opt/aift/registry/templates.yml
-          [ -f /opt/aift/registry/builds.yml ] || cp registry-examples/builds.yml /opt/aift/registry/builds.yml
-          [ -f /opt/aift/registry/deployments.yml ] || cp registry-examples/deployments.yml /opt/aift/registry/deployments.yml
-          cd apps/aift-dashboard
-          docker compose -f compose.yml up -d --build
-          docker compose -f compose.yml ps
-          EOF
+          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
+          DEPLOY_ROLLBACK: ${{ steps.target.outputs.rollback }}
+          DEPLOY_EVENT: ${{ github.event_name }}
+          DEPLOY_ACTOR: ${{ github.actor }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+          DEPLOY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/deploy-dashboard-runner.sh deploy
+
+      - name: Record deployment provenance
+        if: always() && steps.deploy.conclusion != 'skipped'
+        run: bash scripts/deploy-dashboard-runner.sh summarize
+
+      - name: Upload deployment record
+        if: always() && steps.deploy.conclusion != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vps-dashboard-deployment-record-${{ github.run_id }}
+          path: deployment-record.json
+          if-no-files-found: ignore
