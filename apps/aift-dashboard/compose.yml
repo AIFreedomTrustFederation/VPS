@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Set to the exact deployed SHA by scripts/deploy-dashboard-remote.sh.
+        AIFT_COMMIT_SHA: ${AIFT_COMMIT_SHA:-unknown}
     container_name: aift-dashboard
     restart: unless-stopped
     ports:

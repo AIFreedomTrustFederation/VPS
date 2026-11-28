@@ -55,6 +55,10 @@
           "run": "python3 -B tests/test-dashboard-deploy-revision.py"
         },
         {
+          "name": "Lint dashboard deploy scripts",
+          "run": "shellcheck -S warning scripts/deploy-dashboard-remote.sh scripts/deploy-dashboard-runner.sh"
+        },
+        {
           "name": "Verify dashboard Docker context excludes credentials",
           "run": "docker info >/dev/null && python3 -B tests/test-dashboard-docker-context.py -v"
         },

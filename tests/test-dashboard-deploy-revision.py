@@ -76,7 +76,14 @@ class WorkflowStructureTests(unittest.TestCase):
         for name, wf in self.each():
             jobs = wf["jobs"]
             gate, deploy, build = jobs["deploy-gate"], jobs["deploy-dashboard"], jobs[self.BUILD_JOB[name]]
-            self.assertIn("vars.VPS_DEPLOY_ENABLED == 'true'", json.dumps(gate))
+            # The raw value goes to the script; GitHub's '==' is case-insensitive, so never use it.
+            gate_step = next(s for s in gate["steps"] if s.get("id") == "gate")
+            self.assertEqual(gate_step["run"].strip(), "bash scripts/deploy-dashboard-runner.sh gate")
+            self.assertEqual(gate_step["env"]["VPS_DEPLOY_ENABLED_RAW"], "${{ vars.VPS_DEPLOY_ENABLED }}")
+            self.assertNotRegex(self.texts[name], r"vars\.VPS_DEPLOY_ENABLED\s*[=!]=")
+            checkout = gate["steps"][0]
+            self.assertEqual(checkout["with"]["sparse-checkout"], "scripts/deploy-dashboard-runner.sh")
+            self.assertIs(checkout["with"]["sparse-checkout-cone-mode"], False)
             self.assertEqual(gate["outputs"]["deploy"], "${{ steps.gate.outputs.deploy }}")
             self.assertEqual(deploy["if"], "needs.deploy-gate.outputs.deploy == 'true'")
             self.assertCountEqual(deploy["needs"], ["deploy-gate", self.BUILD_JOB[name]])
@@ -209,27 +216,64 @@ class WorkflowStructureTests(unittest.TestCase):
         self.assertIn("Build before deploy", steps)
 
 
-@unittest.skipIf(yaml is None and not os.environ.get("CI"), "PyYAML is not installed")
-class GateBehaviorTests(unittest.TestCase):
-    def gate_script(self, path):
-        return load_workflow(path)["jobs"]["deploy-gate"]["steps"][0]["run"]
+    COVERED = [
+        "scripts/deploy-dashboard-remote.sh",
+        "scripts/deploy-dashboard-runner.sh",
+        "tests/test-dashboard-deploy-revision.py",
+    ]
 
-    def run_gate(self, path, enabled, event, ref):
+    def test_deploy_script_and_test_changes_trigger_verification(self):
+        auto = triggers(self.workflows["auto"])
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                paths = auto[event]["paths"]
+                for path in self.COVERED + ["apps/aift-dashboard/**", ".github/workflows/aift-auto-pipeline.yml"]:
+                    self.assertIn(path, paths)
+        self.assertEqual(auto["push"]["branches"], ["main"])
+        deploy_paths = triggers(self.workflows["deploy"])["pull_request"]["paths"]
+        for path in self.COVERED + [".github/workflows/deploy-aift-dashboard.yml"]:
+            self.assertIn(path, deploy_paths)
+        # Local QA (the required check) has no path filter, runs the deploy tests and lints the scripts.
+        qa = load_workflow(ROOT / ".github/workflows/aift-local-qa.yml")
+        self.assertNotIn("paths", triggers(qa)["pull_request"] or {})
+        runs = [s.get("run", "") for s in qa["jobs"]["local-qa"]["steps"]]
+        self.assertIn("python3 -B tests/test-dashboard-deploy-revision.py", runs)
+        self.assertIn(
+            "shellcheck -S warning scripts/deploy-dashboard-remote.sh scripts/deploy-dashboard-runner.sh", runs
+        )
+
+    def test_pull_requests_can_never_reach_the_deploy_job(self):
+        for name, wf in self.each():
+            self.assertIn("pull_request", triggers(wf))
+            self.assertNotIn("pull_request_target", triggers(wf))
+            self.assertEqual(wf["jobs"]["deploy-dashboard"]["if"], "needs.deploy-gate.outputs.deploy == 'true'")
+
+
+class GateBehaviorTests(unittest.TestCase):
+    def run_gate(self, enabled, event, ref):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "output"
+            env = {"PATH": os.environ["PATH"], "GITHUB_OUTPUT": str(out), "EVENT_NAME": event, "REF_FULL": ref}
+            if enabled is not None:
+                env["VPS_DEPLOY_ENABLED_RAW"] = enabled
             result = subprocess.run(
-                ["bash", "-c", self.gate_script(path)],
-                env={
-                    "PATH": os.environ["PATH"],
-                    "GITHUB_OUTPUT": str(out),
-                    "GATE_ENABLED": enabled,
-                    "EVENT_NAME": event,
-                    "REF_FULL": ref,
-                },
-                text=True,
-                capture_output=True,
+                ["bash", str(RUNNER_SCRIPT), "gate"], env=env, text=True, capture_output=True
             )
             return result, out.read_text() if out.exists() else ""
+
+    def test_authorization_is_exact_and_case_sensitive(self):
+        main = "refs/heads/main"
+        for value in ("True", "TRUE", " true", "true ", "true\n", "\ttrue", "1", "yes", "on", "'true'", '"true"', "", "false", None):
+            for event in ("push", "workflow_dispatch"):
+                with self.subTest(value=value, event=event):
+                    result, output = self.run_gate(value, event, main)
+                    self.assertEqual(output.splitlines(), ["deploy=false"])
+                    if event == "workflow_dispatch":
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn("exactly 'true'", result.stderr)
+                    else:
+                        self.assertEqual(result.returncode, 0)
+                        self.assertIn("::notice::", result.stdout)
 
     def test_gate_matrix(self):
         main = "refs/heads/main"
@@ -243,10 +287,15 @@ class GateBehaviorTests(unittest.TestCase):
             ("", "workflow_dispatch", main, 1, "deploy=false"),
             ("", "push", main, 0, "deploy=false"),
         ]
-        for path in (DEPLOY_WORKFLOW, AUTO_WORKFLOW):
+        cases += [
+            ("true", "pull_request", "refs/pull/7/merge", 0, "deploy=false"),
+            ("true", "pull_request", main, 0, "deploy=false"),  # PR events never deploy
+            ("true", "schedule", main, 0, "deploy=false"),
+        ]
+        for path in (RUNNER_SCRIPT,):
             for enabled, event, ref, code, expected in cases:
-                with self.subTest(workflow=path.name, enabled=enabled, event=event, ref=ref):
-                    result, output = self.run_gate(path, enabled, event, ref)
+                with self.subTest(enabled=enabled, event=event, ref=ref):
+                    result, output = self.run_gate(enabled, event, ref)
                     self.assertEqual(result.returncode, code, result.stderr)
                     self.assertIn(expected, output.splitlines())
                     if code:
@@ -463,6 +512,28 @@ class RunnerTargetTests(RunnerBase):
         result, _ = self.resolve("", sha="not-a-sha")
         self.assertEqual(result.returncode, 1)
 
+    def test_missing_origin_main_fails_closed(self):
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        result, out = self.resolve(self.shas[0])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("origin/main is not available", result.stderr)
+        self.assertEqual(out, [])
+
+    def test_shallow_checkout_fails_closed(self):
+        (self.repo / ".git" / "shallow").write_text(self.shas[1] + "\n")
+        result, out = self.resolve(self.shas[0])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("shallow", result.stderr)
+        self.assertEqual(out, [])
+
+    def test_merge_base_errors_fail_closed(self):
+        real_git = shutil.which("git")
+        self.stub("git", f'if [ "$1" = "merge-base" ]; then exit 128; fi\nexec "{real_git}" "$@"\n')
+        result, out = self.resolve(self.shas[0])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("cannot verify", result.stderr)
+        self.assertEqual(out, [])
+
 
 class RunnerDeployTests(RunnerBase):
     BASE = {
@@ -530,9 +601,33 @@ class RunnerDeployTests(RunnerBase):
 
 
 class RunnerSummaryTests(RunnerBase):
+    def record(self, status="healthy", last="b" * 40):
+        return json.dumps({"status": status, "deployed_sha": "a" * 40, "previous_sha": "c" * 40,
+                           "last_healthy_before": last}, separators=(",", ":"))
+
+    def test_failed_deploy_suggests_the_last_known_healthy_revision(self):
+        out = self.root / "out.log"
+        for status, last, expected in (("unhealthy", "b" * 40, "b" * 40), ("target_mismatch", "none", "c" * 40),
+                                       ("healthy", "b" * 40, "none needed")):
+            with self.subTest(status=status):
+                out.write_text(f"AIFT_DEPLOY_RECORD {self.record(status, last)}\n")
+                self.summary.write_text("")
+                self.runner("summarize", DEPLOY_OUTPUT=str(out), DEPLOY_RECORD_FILE=str(self.root / "rec.json"))
+                self.assertIn(f"Suggested rollback target (last known healthy): `{expected}", self.summary.read_text())
+
+    def test_malformed_records_are_not_published(self):
+        out = self.root / "out.log"
+        for bad in ('{"status":"healthy"}', "not json", '{"status":"pwned","deployed_sha":"%s","previous_sha":"%s"}' % ("a" * 40, "c" * 40)):
+            with self.subTest(bad=bad):
+                out.write_text(f"AIFT_DEPLOY_RECORD {bad}\n")
+                self.summary.write_text("")
+                self.runner("summarize", DEPLOY_OUTPUT=str(out), DEPLOY_RECORD_FILE=str(self.root / "rec.json"))
+                self.assertIn("No valid provenance record", self.summary.read_text())
+                self.assertFalse((self.root / "rec.json").exists())
+
     def test_record_is_written_to_summary_and_file(self):
         out = self.root / "out.log"
-        record = '{"status":"healthy","deployed_sha":"%s"}' % ("a" * 40)
+        record = self.record()
         out.write_text(f"noise\nAIFT_DEPLOY_RECORD {record}\n")
         result = self.runner("summarize", DEPLOY_OUTPUT=str(out), DEPLOY_RECORD_FILE=str(self.root / "rec.json"))
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -545,11 +640,11 @@ class RunnerSummaryTests(RunnerBase):
         result = self.runner("summarize", DEPLOY_OUTPUT=str(out), DEPLOY_RECORD_FILE=str(self.root / "rec.json"))
         self.assertEqual(result.returncode, 0)
         self.assertFalse((self.root / "rec.json").exists())
-        self.assertIn("No provenance record", self.summary.read_text())
+        self.assertIn("No valid provenance record", self.summary.read_text())
 
     def test_record_that_could_break_the_markdown_fence_is_not_published(self):
         out = self.root / "out.log"
-        out.write_text('AIFT_DEPLOY_RECORD {"x":"```"}\n')
+        out.write_text('AIFT_DEPLOY_RECORD ' + self.record().replace("healthy", "```", 1) + "\n")
         self.runner("summarize", DEPLOY_OUTPUT=str(out), DEPLOY_RECORD_FILE=str(self.root / "rec.json"))
         self.assertNotIn("```json", self.summary.read_text())
 
@@ -571,7 +666,9 @@ class RemoteFixture(unittest.TestCase):
         self.bin = root / "bin"
         self.stub_log = root / "stub.log"
         self.curl_count = root / "curl.count"
+        self.stub_dir = root / "stubstate"
         self.bin.mkdir()
+        self.stub_dir.mkdir()
         self.git(root, "init", "-q", "--bare", "-b", "main", str(self.origin))
         self.git(self.origin, "config", "uploadpack.allowReachableSHA1InWant", "true")
         self.git(root, "-c", "protocol.file.allow=always", "clone", "-q", str(self.origin), str(self.work))
@@ -592,8 +689,16 @@ class RemoteFixture(unittest.TestCase):
 
     DOCKER_STUB = (
         'echo "docker $*" >> "$STUB_LOG"\n'
-        'if [ "$1" = "inspect" ]; then echo "${STUB_CONTAINER_STATE-true false}"; exit 0; fi\n'
-        'if [ "$1" = "compose" ] && [[ " $* " == *" up "* ]] && [ -n "${STUB_COMPOSE_FAIL:-}" ]; then exit 1; fi\n'
+        'if [ "$1" = "inspect" ]; then\n'
+        '  if [[ "$*" == *Labels* ]]; then\n'
+        '    if [ -n "${STUB_LABEL+x}" ]; then echo "$STUB_LABEL"; else cat "$STUB_DIR/label" 2>/dev/null || echo; fi\n'
+        '  else echo "${STUB_CONTAINER_STATE-true false}"; fi\n'
+        '  exit 0\n'
+        'fi\n'
+        'if [ "$1" = "compose" ] && [[ " $* " == *" up "* ]]; then\n'
+        '  [ -z "${STUB_COMPOSE_FAIL:-}" ] || exit 1\n'
+        '  printf "%s" "${AIFT_COMMIT_SHA:-}" > "$STUB_DIR/label"\n'
+        'fi\n'
         "exit 0\n"
     )
     CURL_STUB = (
@@ -601,7 +706,9 @@ class RemoteFixture(unittest.TestCase):
         'n=$(( $(cat "$STUB_CURL_COUNT" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$STUB_CURL_COUNT"\n'
         '[ -z "${STUB_CURL_FAIL:-}" ] || exit 22\n'
         '[ "$n" -gt "${STUB_CURL_OK_AFTER:-0}" ] || exit 7\n'
-        'echo \'{"ok":true,"status":"warning"}\'\n'
+        'if [ -n "${STUB_HEALTH_BODY+x}" ]; then printf "%s" "$STUB_HEALTH_BODY"; exit 0; fi\n'
+        'commit="${STUB_HEALTH_COMMIT:-$(cat "$STUB_DIR/label" 2>/dev/null)}"\n'
+        'printf \'{"ok":true,"status":"warning","checked_at":"2026-11-28T00:00:00Z","commit":"%s","checks":[]}\' "$commit"\n'
     )
 
     def stub(self, name, body):
@@ -641,6 +748,7 @@ class RemoteFixture(unittest.TestCase):
             "AIFT_HEALTH_TIMEOUT_S": "2",
             "STUB_LOG": str(self.stub_log),
             "STUB_CURL_COUNT": str(self.curl_count),
+            "STUB_DIR": str(self.stub_dir),
         }
         full_env.update(env)
         args = [str(app_dir if app_dir is not None else self.server), sha, run_id, run_url, actor, event, rollback]
@@ -698,9 +806,13 @@ class RemoteDeployTests(RemoteFixture):
         self.assertEqual(two["previous_sha"], sha2)
         self.assertEqual(two["deployed_sha"], sha3)
         self.assertEqual(two["server_head"], sha3)
+        self.assertEqual(two["running_commit"], sha3)
+        self.assertEqual(one["last_healthy_before"], "none")
+        self.assertEqual(two["last_healthy_before"], sha2)
         self.assertEqual(
             set(two),
-            {"timestamp_utc", "status", "deployed_sha", "previous_sha", "server_head", "run_id", "run_url", "actor", "event", "rollback"},
+            {"timestamp_utc", "status", "deployed_sha", "previous_sha", "server_head", "running_commit",
+             "last_healthy_before", "run_id", "run_url", "actor", "event", "rollback"},
         )
         self.assertEqual((two["status"], two["run_id"], two["actor"], two["event"], two["rollback"]), ("healthy", "123456789", "dependabot[bot]", "push", False))
         self.assertEqual(two["run_url"], RUN_URL)
@@ -829,8 +941,7 @@ class RemoteHealthTests(RemoteFixture):
 
     def test_health_response_without_ok_true_is_not_healthy(self):
         sha2 = self.push_commit("second")
-        self.stub("curl", 'echo "curl $*" >> "$STUB_LOG"\necho \'{"ok":false}\'\n')
-        result = self.run_remote(sha2)
+        result = self.run_remote(sha2, STUB_HEALTH_BODY='{"ok":false}')
         self.assertEqual(result.returncode, 1)
         self.assertEqual(self.records()[-1]["status"], "unhealthy")
 
@@ -859,6 +970,190 @@ class RemoteHealthTests(RemoteFixture):
         self.assertNotRegex(remote, r"curl[^\n]*(0\.0\.0\.0|https?://[a-z]+\.[a-z])")
 
 
+class RemoteVerificationTests(RemoteFixture):
+    def last_healthy(self):
+        path = self.state / "last-healthy-sha"
+        return path.read_text().strip() if path.exists() else None
+
+    def health_body(self, **override):
+        body = {"ok": True, "status": "warning", "checked_at": "2026-11-28T00:00:00Z",
+                "commit": override.pop("commit"), "checks": []}
+        body.update(override)
+        return json.dumps(body)
+
+    def test_strict_json_health_schema_rejects_everything_but_ok_true(self):
+        sha2 = self.push_commit("second")
+        good = json.loads(self.health_body(commit=sha2))
+        bodies = {
+            "not json": "ok true",
+            "html": "<html>ok</html>",
+            "grep bait": '{"ok":false,"note":"\\"ok\\":true"}',
+            "array": "[" + self.health_body(commit=sha2) + "]",
+            "missing ok": json.dumps({k: v for k, v in good.items() if k != "ok"}),
+            "ok string": json.dumps({**good, "ok": "true"}),
+            "ok one": json.dumps({**good, "ok": 1}),
+            "ok false": json.dumps({**good, "ok": False}),
+            "ok null": json.dumps({**good, "ok": None}),
+            "status broken": json.dumps({**good, "status": "broken"}),
+            "no checks": json.dumps({k: v for k, v in good.items() if k != "checks"}),
+            "no commit": json.dumps({k: v for k, v in good.items() if k != "commit"}),
+            "commit unknown": json.dumps({**good, "commit": "unknown"}),
+            "commit other": json.dumps({**good, "commit": self.sha1}),
+            "duplicate ok": self.health_body(commit=sha2)[:-1] + ',"ok":true}',
+            "nan": self.health_body(commit=sha2)[:-1] + ',"x":NaN}',
+            "empty": "",
+        }
+        for label, body in bodies.items():
+            with self.subTest(label):
+                (self.state / "last-healthy-sha").unlink(missing_ok=True)
+                result = self.run_remote(sha2, STUB_HEALTH_BODY=body)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertEqual(self.records()[-1]["status"], "unhealthy")
+                self.assertIsNone(self.last_healthy())
+                # Reset the server so the next case deploys forward again.
+                self.git(self.server, "checkout", "-q", "--detach", self.sha1)
+        result = self.run_remote(sha2, STUB_HEALTH_BODY=self.health_body(commit=sha2))
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_deploy_exports_commit_for_build_and_records_running_commit(self):
+        sha2 = self.push_commit("second")
+        self.assertEqual(self.run_remote(sha2).returncode, 0)
+        self.assertEqual((self.stub_dir / "label").read_text(), sha2)
+        self.assertTrue(any("org.opencontainers.image.revision" in c for c in self.stub_calls("docker inspect")))
+        self.assertEqual(self.records()[-1]["running_commit"], sha2)
+
+    def test_container_label_mismatch_fails_as_target_mismatch(self):
+        sha2 = self.push_commit("second")
+        result = self.run_remote(sha2, STUB_LABEL=self.sha1, STUB_HEALTH_COMMIT=sha2)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target mismatch", result.stderr)
+        self.assertEqual(self.records()[-1]["status"], "target_mismatch")
+        self.assertIsNone(self.last_healthy())
+
+    def test_last_known_healthy_tracks_only_verified_deploys(self):
+        sha2 = self.push_commit("second")
+        sha3 = self.push_commit("third")
+        self.assertEqual(self.run_remote(sha2).returncode, 0)
+        self.assertEqual(self.last_healthy(), sha2)
+        self.assertEqual(self.run_remote(sha3, STUB_CURL_FAIL="1").returncode, 1)
+        self.assertEqual(self.last_healthy(), sha2, "an unhealthy deploy must not move last-known-healthy")
+        self.assertEqual(self.records()[-1]["last_healthy_before"], sha2)
+        self.assertEqual(self.head(), sha3)
+
+    def test_corrupt_last_healthy_file_refuses_before_changing_anything(self):
+        sha2 = self.push_commit("second")
+        self.state.mkdir()
+        for content in ("garbage\n", "A" * 40 + "\n", ""):
+            with self.subTest(content=content):
+                (self.state / "last-healthy-sha").write_text(content)
+                before = self.head()
+                result = self.run_remote(sha2)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("corrupt", result.stderr)
+                self.assertEqual(self.head(), before)
+        self.assertEqual(self.stub_calls("docker"), [])
+
+    def test_rollback_verifies_exact_target_and_updates_last_healthy(self):
+        sha2 = self.push_commit("second")
+        self.assertEqual(self.run_remote(sha2).returncode, 0)
+        result = self.run_remote(self.sha1, rollback="true")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.head(), self.sha1)
+        record = self.records()[-1]
+        self.assertEqual((record["status"], record["deployed_sha"], record["running_commit"], record["server_head"]),
+                         ("healthy", self.sha1, self.sha1, self.sha1))
+        self.assertTrue(record["rollback"])
+        self.assertEqual(self.last_healthy(), self.sha1)
+
+    def test_rollback_fails_if_the_app_still_runs_the_old_commit(self):
+        sha2 = self.push_commit("second")
+        self.assertEqual(self.run_remote(sha2).returncode, 0)
+        result = self.run_remote(self.sha1, rollback="true", STUB_HEALTH_COMMIT=sha2)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.records()[-1]["status"], "unhealthy")
+        self.assertEqual(self.last_healthy(), sha2)
+        result = self.run_remote(self.sha1, rollback="true", STUB_LABEL=sha2, STUB_HEALTH_COMMIT=self.sha1)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.records()[-1]["status"], "target_mismatch")
+        self.assertEqual(self.last_healthy(), sha2)
+
+
+class RemoteAncestryTests(RemoteFixture):
+    def side_commit(self):
+        """A commit pushed to another branch: neither ancestor nor descendant of main."""
+        self.git(self.work, "checkout", "-q", "-b", "side", self.sha1)
+        (self.work / "side.txt").write_text("side")
+        self.git(self.work, "add", "side.txt")
+        self.git(self.work, "commit", "-qm", "side")
+        sha = self.git(self.work, "rev-parse", "HEAD")
+        self.git(self.work, "push", "-q", "origin", "side")
+        self.git(self.work, "checkout", "-q", "main")
+        return sha
+
+    def test_diverged_target_is_refused_for_normal_deploys(self):
+        sha2 = self.push_commit("second")
+        self.assertEqual(self.run_remote(sha2).returncode, 0)
+        side = self.side_commit()
+        result = self.run_remote(side)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not descend", result.stderr)
+        self.assertEqual(self.head(), sha2)
+        self.assertEqual(self.records()[-1]["status"], "refused_downgrade")
+
+    def test_rollback_target_must_be_on_origin_main(self):
+        side = self.side_commit()
+        result = self.run_remote(side, rollback="true")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not an ancestor of origin/main", result.stderr)
+        self.assertEqual(self.head(), self.sha1)
+        self.assertEqual(self.records()[-1]["status"], "refused_rollback_target")
+
+    def test_merge_base_errors_fail_closed(self):
+        sha2 = self.push_commit("second")
+        real_git = shutil.which("git")
+        for rollback in ("false", "true"):
+            with self.subTest(rollback=rollback):
+                self.stub("git", f'if [ "$1" = "merge-base" ]; then exit 128; fi\nexec "{real_git}" "$@"\n')
+                result = self.run_remote(sha2 if rollback == "false" else self.sha1, rollback=rollback)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("cannot verify ancestry", result.stderr)
+                self.assertEqual(self.head(), self.sha1)
+                self.assertEqual(self.records()[-1]["status"], "refused_ancestry")
+                (self.bin / "git").unlink()
+
+    def test_shallow_server_checkout_is_refused(self):
+        sha2 = self.push_commit("second")
+        (self.server / ".git" / "shallow").write_text(self.sha1 + "\n")
+        result = self.run_remote(sha2)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("shallow", result.stderr)
+        self.assertEqual(self.head(), self.sha1)
+
+    def test_required_tools_are_checked_before_anything_changes(self):
+        remote = read(REMOTE_SCRIPT)
+        self.assertIn("for tool in git docker curl python3; do", remote)
+        self.assertNotRegex(remote, r'grep[^\n]*"ok"')
+
+
+class DashboardCommitExposureTests(unittest.TestCase):
+    def test_image_build_arg_label_and_env(self):
+        dockerfile = read(ROOT / "apps/aift-dashboard/Dockerfile")
+        self.assertIn("ARG AIFT_COMMIT_SHA=unknown", dockerfile)
+        self.assertIn("ENV AIFT_COMMIT_SHA=$AIFT_COMMIT_SHA", dockerfile)
+        self.assertIn("LABEL org.opencontainers.image.revision=$AIFT_COMMIT_SHA", dockerfile)
+        runner_stage = dockerfile[dockerfile.index("AS runner"):]
+        self.assertIn("ARG AIFT_COMMIT_SHA", runner_stage)
+
+    def test_compose_passes_the_commit_build_arg(self):
+        compose = read(ROOT / "apps/aift-dashboard/compose.yml")
+        self.assertIn("AIFT_COMMIT_SHA: ${AIFT_COMMIT_SHA:-unknown}", compose)
+
+    def test_health_route_reports_a_validated_commit(self):
+        route = read(ROOT / "apps/aift-dashboard/app/api/health/route.ts")
+        self.assertIn("commit: deployedCommit()", route)
+        self.assertIn("/^[0-9a-f]{40}$/.test(value) ? value : 'unknown'", route)
+
+
 class ScriptSyntaxAndDocsTests(unittest.TestCase):
     def test_scripts_are_valid_bash(self):
         for script in (REMOTE_SCRIPT, RUNNER_SCRIPT):
@@ -877,6 +1172,7 @@ class ScriptSyntaxAndDocsTests(unittest.TestCase):
             "[host]:port keytype key",
             "ssh-keyscan -p <port> -t ed25519 <host>",
             "docs/deploy-rollback.md",
+            "case-sensitive",
         ):
             self.assertIn(needle, doc)
 
@@ -891,6 +1187,9 @@ class ScriptSyntaxAndDocsTests(unittest.TestCase):
             "VPS_DEPLOY_ENABLED",
             "docker compose",
             "/api/health",
+            "last-healthy-sha",
+            "running_commit",
+            "org.opencontainers.image.revision",
         ):
             self.assertIn(needle, doc)
 
