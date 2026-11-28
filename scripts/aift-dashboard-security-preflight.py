@@ -234,10 +234,34 @@ class SelfTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 provision(p)
 
+    def test_default_repo_is_script_checkout_not_hardcoded_path(self):
+        self.assertEqual(default_repo_path(env={}), Path(__file__).resolve().parents[1])
+        self.assertNotEqual(default_repo_path(env={}), Path("/root/VPS"))
+        self.assertEqual(default_repo_path(env={"VPS_APP_PATH": "/root/AIFT/VPS"}), Path("/root/AIFT/VPS"))
+        self.assertEqual(default_repo_path(env={"VPS_APP_PATH": "  "}), Path(__file__).resolve().parents[1])
+
+
+def default_repo_path(env=None):
+    """Use VPS_APP_PATH when set; otherwise the repository that contains this script.
+
+    Never default to a hardcoded server path such as /root/VPS.
+    """
+    if env is None:
+        env = os.environ
+    configured = (env.get("VPS_APP_PATH") or "").strip()
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[1]
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", type=Path, default=Path("/root/VPS"))
+    parser.add_argument(
+        "--repo",
+        type=Path,
+        default=None,
+        help="VPS checkout to inspect (default: VPS_APP_PATH or this script's repository)",
+    )
     parser.add_argument("--domain", default="vps.aifreedomtrust.com")
     parser.add_argument("--prepare-token", action="store_true")
     parser.add_argument("--live", action="store_true", help="explicit local tests on already-patched running container")
@@ -246,6 +270,8 @@ def main():
     if args.self_test:
         result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(SelfTests))
         return 0 if result.wasSuccessful() else 1
+    if args.repo is None:
+        args.repo = default_repo_path()
     if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", args.domain):
         parser.error("domain must be a hostname")
     dashboard = args.repo.resolve() / "apps/aift-dashboard"

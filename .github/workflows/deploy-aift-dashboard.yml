@@ -1,25 +1,36 @@
 name: Deploy AIFT Dashboard to VPS
 
+# Manual production deploy / rollback. Disabled unless the repository variable
+# VPS_DEPLOY_ENABLED is exactly 'true'. A manual run FAILS (never skips quietly)
+# when deployment is disabled, run from a ref other than main, or any required
+# secret is missing. See docs/github-secrets.md and docs/deploy-rollback.md.
 on:
   workflow_dispatch:
+    inputs:
+      rollback_sha:
+        description: 'Optional rollback: full 40-character SHA of a commit already on main. Leave empty to deploy this run''s commit.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 jobs:
-  deploy-dashboard:
+  # Build and verification never depend on production deployment authorization.
+  verify-dashboard:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/aift-dashboard
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -29,59 +40,87 @@ jobs:
       - name: Build before deploy
         run: npm run build
 
-      - name: Configure SSH
+  deploy-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.gate.outputs.deploy }}
+    steps:
+      - name: Check deployment authorization
+        id: gate
+        env:
+          GATE_ENABLED: ${{ vars.VPS_DEPLOY_ENABLED == 'true' }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_FULL: ${{ github.ref }}
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/aift_vps_key
-          chmod 600 ~/.ssh/aift_vps_key
-          ssh-keyscan -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          set -Eeuo pipefail
+          if [ "$GATE_ENABLED" = "true" ] && [ "$REF_FULL" = "refs/heads/main" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "deploy=false" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "::error::Manual deploy refused: repository variable VPS_DEPLOY_ENABLED must be exactly 'true' and the run must be on refs/heads/main." >&2
+            exit 1
+          fi
+          echo "::notice::Deploy skipped: VPS_DEPLOY_ENABLED is not 'true' or the ref is not main."
+
+  deploy-dashboard:
+    needs: [verify-dashboard, deploy-gate]
+    if: needs.deploy-gate.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: production
+      url: https://vps.aifreedomtrust.com
+    concurrency:
+      group: vps-dashboard-deploy
+      cancel-in-progress: false
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_APP_PATH: ${{ secrets.VPS_APP_PATH }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate deployment configuration
+        run: bash scripts/deploy-dashboard-runner.sh validate
+
+      - name: Resolve deploy target
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ROLLBACK_SHA: ${{ inputs.rollback_sha }}
+        run: bash scripts/deploy-dashboard-runner.sh resolve-target
+
+      - name: Configure SSH
+        run: bash scripts/deploy-dashboard-runner.sh ssh-setup
 
       - name: Deploy dashboard to Sacramento Node 001
-        working-directory: .
-        run: |
-          ssh -i ~/.ssh/aift_vps_key -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" <<'EOF'
-          set -Eeuo pipefail
-          APP_DIR="${VPS_APP_PATH:-/root/VPS}"
-          if [ ! -d "$APP_DIR/.git" ]; then
-            git clone https://github.com/AIFreedomTrustFederation/VPS.git "$APP_DIR"
-          fi
-          cd "$APP_DIR"
-          git pull --ff-only
-          # The runner built github.sha; fail closed if the remote checkout differs.
-          DEPLOY_SHA="${{ github.sha }}"
-          if [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]; then
-            echo "Refusing deployment: remote revision differs from workflow commit $DEPLOY_SHA" >&2
-            exit 1
-          fi
-          # Matching HEAD alone does not prove the files Docker will build are unchanged.
-          checkout_status=$(git status --porcelain --untracked-files=all) || {
-            echo "Refusing deployment: cannot inspect remote checkout" >&2
-            exit 1
-          }
-          if [ -n "$checkout_status" ]; then
-            echo "Refusing deployment: dirty checkout at verified commit" >&2
-            exit 1
-          fi
-          mkdir -p /opt/aift/registry /opt/aift/logs
-          [ -f /opt/aift/registry/nodes.yml ] || cp registry-examples/nodes.yml /opt/aift/registry/nodes.yml
-          [ -f /opt/aift/registry/templates.yml ] || cp registry-examples/templates.yml /opt/aift/registry/templates.yml
-          [ -f /opt/aift/registry/builds.yml ] || cp registry-examples/builds.yml /opt/aift/registry/builds.yml
-          [ -f /opt/aift/registry/deployments.yml ] || cp registry-examples/deployments.yml /opt/aift/registry/deployments.yml
-          if [ ! -f /opt/aift/registry/apps.yml ]; then
-            cat > /opt/aift/registry/apps.yml <<'APPREGISTRY'
-          apps:
-            aift-dashboard:
-              repo: https://github.com/AIFreedomTrustFederation/VPS
-              branch: main
-              domain: vps.aifreedomtrust.com
-              framework: nextjs
-              status: running
-              node: sacramento-node-001
-              trust_class: business-app
-          APPREGISTRY
-          fi
-          cd apps/aift-dashboard
-          docker compose -f compose.yml up -d --build
-          docker compose -f compose.yml ps
-          echo "AIFT Dashboard deployed to Sacramento Node 001 on port 3000."
-          EOF
+        id: deploy
+        env:
+          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
+          DEPLOY_ROLLBACK: ${{ steps.target.outputs.rollback }}
+          DEPLOY_EVENT: ${{ github.event_name }}
+          DEPLOY_ACTOR: ${{ github.actor }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+          DEPLOY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/deploy-dashboard-runner.sh deploy
+
+      - name: Record deployment provenance
+        if: always() && steps.deploy.conclusion != 'skipped'
+        run: bash scripts/deploy-dashboard-runner.sh summarize
+
+      - name: Upload deployment record
+        if: always() && steps.deploy.conclusion != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vps-dashboard-deployment-record-${{ github.run_id }}
+          path: deployment-record.json
+          if-no-files-found: ignore
