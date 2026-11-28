@@ -93,7 +93,7 @@ class WorkflowStructureTests(unittest.TestCase):
         for name, wf in self.each():
             environment = wf["jobs"]["deploy-dashboard"]["environment"]
             self.assertEqual(environment["name"], "production")
-            self.assertTrue(environment["url"].startswith("https://vps.aifreedomtrust.com"))
+            self.assertEqual(environment["url"], "https://vps.aifreedomtrust.com")
             for job_name, job in wf["jobs"].items():
                 if job_name != "deploy-dashboard":
                     self.assertNotIn("environment", job, job_name)
