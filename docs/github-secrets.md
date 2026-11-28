@@ -115,6 +115,12 @@ the `vps-dashboard-deploy` concurrency slot; the server also refuses to move a d
 The server needs `git`, `docker` (with compose), `curl` and `python3`; a missing tool refuses the
 deploy before anything changes.
 
+Targets older than the running-commit contract (#51) are refused before anything changes
+(`refused_unverifiable_target`). The whole pipeline (real sshd with a pinned `[host]:port` key, real
+Docker build of the dashboard, health, labels, provenance, rollback, locking and interruptions) can be
+reproduced on a disposable machine with `scripts/acceptance/dashboard-deploy-acceptance.sh`; see
+[`docs/dashboard-deploy-acceptance.md`](dashboard-deploy-acceptance.md).
+
 Rollback procedures are in [`docs/deploy-rollback.md`](deploy-rollback.md).
 
 ## Naming standard

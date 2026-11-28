@@ -66,6 +66,21 @@ if [ -e "$LAST_HEALTHY_FILE" ]; then
   LAST_HEALTHY_BEFORE="$(cat "$LAST_HEALTHY_FILE")" || refuse "cannot read $LAST_HEALTHY_FILE"
   [[ "$LAST_HEALTHY_BEFORE" =~ $SHA_RE ]] || refuse "$LAST_HEALTHY_FILE is corrupt; fix it before deploying"
 fi
+# A deploy killed without running its EXIT trap (SIGKILL, OOM, power loss) leaves
+# this marker behind; the next deploy turns it into an "interrupted" record.
+IN_PROGRESS_FILE="$STATE_DIR/in-progress"
+INTERRUPTED_RECORD=""
+if [ -e "$IN_PROGRESS_FILE" ]; then
+  INTERRUPTED_RECORD="$(cat "$IN_PROGRESS_FILE")" || refuse "cannot read $IN_PROGRESS_FILE"
+  python3 -c '
+import json, re, sys
+line = sys.argv[1]
+record = json.loads(line)
+assert "\n" not in line and isinstance(record, dict)
+assert record.get("status") == "interrupted"
+assert re.fullmatch(r"[0-9a-f]{40}", record.get("deployed_sha", ""))
+' "$INTERRUPTED_RECORD" 2> /dev/null || refuse "$IN_PROGRESS_FILE is corrupt; inspect it and the server before deploying"
+fi
 
 cd "$APP_DIR"
 checkout_status=$(git status --porcelain --untracked-files=all) || refuse "cannot inspect remote checkout"
@@ -73,19 +88,28 @@ checkout_status=$(git status --porcelain --untracked-files=all) || refuse "canno
 [ "$(git rev-parse --is-shallow-repository)" = "false" ] || refuse "shallow checkout: ancestry cannot be verified"
 PREVIOUS_SHA=$(git rev-parse --verify "HEAD^{commit}") || refuse "cannot read current revision"
 
+if [ -n "$INTERRUPTED_RECORD" ]; then
+  printf '%s\n' "$INTERRUPTED_RECORD" >> "$LOG_FILE" || refuse "cannot write provenance log"
+  rm -f "$IN_PROGRESS_FILE" || refuse "cannot clear $IN_PROGRESS_FILE"
+  echo "An earlier deploy was killed before it finished; recorded it as interrupted: $INTERRUPTED_RECORD" >&2
+fi
+
 STATUS="failed"
 RUNNING_COMMIT="unknown"
+record_line() { # status server_head running_commit -> one JSON line in $line
+  printf -v line '{"timestamp_utc":"%s","status":"%s","deployed_sha":"%s","previous_sha":"%s","server_head":"%s","running_commit":"%s","last_healthy_before":"%s","run_id":"%s","run_url":"%s","actor":"%s","event":"%s","rollback":%s}' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$DEPLOY_SHA" "$PREVIOUS_SHA" "$2" "$3" "$LAST_HEALTHY_BEFORE" "$RUN_ID" "$RUN_URL" "$ACTOR" "$EVENT" "$ROLLBACK"
+}
 write_record() {
   local rc=$?
   trap - EXIT
-  local server_head ts line
+  local server_head line
   server_head=$(git -C "$APP_DIR" rev-parse HEAD 2> /dev/null || echo unknown)
   [[ "$server_head" =~ $SHA_RE ]] || server_head="unknown"
   [[ "$RUNNING_COMMIT" =~ $SHA_RE ]] || RUNNING_COMMIT="unknown"
-  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  printf -v line '{"timestamp_utc":"%s","status":"%s","deployed_sha":"%s","previous_sha":"%s","server_head":"%s","running_commit":"%s","last_healthy_before":"%s","run_id":"%s","run_url":"%s","actor":"%s","event":"%s","rollback":%s}' \
-    "$ts" "$STATUS" "$DEPLOY_SHA" "$PREVIOUS_SHA" "$server_head" "$RUNNING_COMMIT" "$LAST_HEALTHY_BEFORE" "$RUN_ID" "$RUN_URL" "$ACTOR" "$EVENT" "$ROLLBACK"
+  record_line "$STATUS" "$server_head" "$RUNNING_COMMIT"
   if printf '%s\n' "$line" >> "$LOG_FILE"; then
+    rm -f "$IN_PROGRESS_FILE"
     echo "AIFT_DEPLOY_RECORD $line"
   else
     echo "Could not append deployment record to $LOG_FILE" >&2
@@ -94,6 +118,10 @@ write_record() {
   exit "$rc"
 }
 trap write_record EXIT
+# Written before anything changes; removed once this run's own record is appended.
+record_line interrupted "$PREVIOUS_SHA" unknown
+{ printf '%s\n' "$line" > "$IN_PROGRESS_FILE.tmp.$$" && mv -f "$IN_PROGRESS_FILE.tmp.$$" "$IN_PROGRESS_FILE"; } \
+  || refuse "cannot write $IN_PROGRESS_FILE"
 
 # is_ancestor A B -> 0 if A is an ancestor of (or equal to) B, 1 if not.
 # Any other git result (unknown object, corrupt or shallow history) refuses.
@@ -124,6 +152,26 @@ else
     STATUS="refused_downgrade"
     refuse "$DEPLOY_SHA does not descend from the deployed $PREVIOUS_SHA; use rollback_sha for an intentional rollback"
   fi
+fi
+
+# The target must implement the running-commit contract (image label + /api/health
+# "commit", added in #51). Older commits cannot be verified after the build, so
+# they are refused here, before the checkout or the running app changes.
+# Roll back to such a commit only with the manual procedure in docs/deploy-rollback.md.
+target_reports_its_commit() {
+  local dockerfile compose route
+  dockerfile=$(git show "$DEPLOY_SHA:apps/aift-dashboard/Dockerfile" 2> /dev/null) || return 1
+  compose=$(git show "$DEPLOY_SHA:apps/aift-dashboard/compose.yml" 2> /dev/null) || return 1
+  route=$(git show "$DEPLOY_SHA:apps/aift-dashboard/app/api/health/route.ts" 2> /dev/null) || return 1
+  # shellcheck disable=SC2016 # literal text expected in the target's files
+  [[ "$dockerfile" == *'ARG AIFT_COMMIT_SHA'* ]] \
+    && [[ "$dockerfile" == *'LABEL org.opencontainers.image.revision=$AIFT_COMMIT_SHA'* ]] \
+    && [[ "$compose" == *'AIFT_COMMIT_SHA: ${AIFT_COMMIT_SHA'* ]] \
+    && [[ "$route" == *'process.env.AIFT_COMMIT_SHA'* ]]
+}
+if ! target_reports_its_commit; then
+  STATUS="refused_unverifiable_target"
+  refuse "$DEPLOY_SHA predates the running-commit contract (no image revision label or /api/health commit), so the deploy could not be verified"
 fi
 
 git checkout --detach "$DEPLOY_SHA"

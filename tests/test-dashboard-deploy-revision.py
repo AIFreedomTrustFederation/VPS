@@ -239,7 +239,7 @@ class WorkflowStructureTests(unittest.TestCase):
         runs = [s.get("run", "") for s in qa["jobs"]["local-qa"]["steps"]]
         self.assertIn("python3 -B tests/test-dashboard-deploy-revision.py", runs)
         self.assertIn(
-            "shellcheck -S warning scripts/deploy-dashboard-remote.sh scripts/deploy-dashboard-runner.sh", runs
+            "shellcheck -S warning scripts/deploy-dashboard-remote.sh scripts/deploy-dashboard-runner.sh scripts/acceptance/dashboard-deploy-acceptance.sh", runs
         )
 
     def test_pull_requests_can_never_reach_the_deploy_job(self):
@@ -677,8 +677,11 @@ class RemoteFixture(unittest.TestCase):
         (self.work / "registry-examples").mkdir()
         for name in ("nodes", "templates", "builds", "deployments"):
             (self.work / "registry-examples" / f"{name}.yml").write_text(f"{name}: []\n")
-        (self.work / "apps/aift-dashboard").mkdir(parents=True)
-        (self.work / "apps/aift-dashboard/compose.yml").write_text("services: {}\n")
+        # The real files that carry the running-commit contract (checked before any build).
+        for rel in self.CONTRACT_FILES:
+            dest = self.work / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(read(ROOT / rel))
         self.sha1 = self.commit("first")
         self.git(self.work, "push", "-q", "origin", "main")
         self.git(root, "-c", "protocol.file.allow=always", "clone", "-q", str(self.origin), str(self.server))
@@ -686,6 +689,12 @@ class RemoteFixture(unittest.TestCase):
         self.git(self.server, "config", "user.name", "CI Test")
         self.stub("docker", self.DOCKER_STUB)
         self.stub("curl", self.CURL_STUB)
+
+    CONTRACT_FILES = (
+        "apps/aift-dashboard/Dockerfile",
+        "apps/aift-dashboard/compose.yml",
+        "apps/aift-dashboard/app/api/health/route.ts",
+    )
 
     DOCKER_STUB = (
         'echo "docker $*" >> "$STUB_LOG"\n'
@@ -1078,6 +1087,115 @@ class RemoteVerificationTests(RemoteFixture):
         self.assertEqual(self.last_healthy(), sha2)
 
 
+class RemoteRevisionContractTests(RemoteFixture):
+    """Commits from before the running-commit contract are refused before anything changes."""
+
+    def drop_contract(self, rel, needle):
+        path = self.work / rel
+        text = path.read_text()
+        self.assertIn(needle, text)
+        path.write_text(text.replace(needle, "# removed"))
+        self.git(self.work, "add", "-A")
+        self.git(self.work, "commit", "-qm", "legacy: no running-commit contract")
+        self.git(self.work, "push", "-q", "origin", "main")
+        return self.git(self.work, "rev-parse", "HEAD")
+
+    def test_each_missing_part_of_the_contract_is_refused_before_build(self):
+        cases = [
+            ("apps/aift-dashboard/Dockerfile", "LABEL org.opencontainers.image.revision=$AIFT_COMMIT_SHA"),
+            ("apps/aift-dashboard/Dockerfile", "ARG AIFT_COMMIT_SHA"),
+            ("apps/aift-dashboard/compose.yml", "AIFT_COMMIT_SHA: ${AIFT_COMMIT_SHA"),
+            ("apps/aift-dashboard/app/api/health/route.ts", "process.env.AIFT_COMMIT_SHA"),
+        ]
+        for rel, needle in cases:
+            with self.subTest(rel=rel, needle=needle):
+                self.git(self.work, "checkout", "-q", "--", ".")
+                self.git(self.work, "reset", "-q", "--hard", self.sha1)
+                self.git(self.work, "push", "-q", "--force", "origin", "main")
+                legacy = self.drop_contract(rel, needle)
+                self.stub_log.write_text("")
+                result = self.run_remote(legacy)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("predates the running-commit contract", result.stderr)
+                self.assertEqual(self.records()[-1]["status"], "refused_unverifiable_target")
+                self.assertEqual(self.head(), self.sha1)
+                self.assertEqual(self.stub_calls("docker"), [])
+
+    def test_rollback_to_a_pre_contract_commit_is_refused_and_keeps_the_running_app(self):
+        legacy = self.drop_contract("apps/aift-dashboard/Dockerfile", "LABEL org.opencontainers.image.revision=$AIFT_COMMIT_SHA")
+        for rel in self.CONTRACT_FILES:
+            (self.work / rel).write_text(read(ROOT / rel))
+        restored = self.commit("restore contract")
+        self.git(self.work, "push", "-q", "origin", "main")
+        self.assertEqual(self.run_remote(restored).returncode, 0)
+        result = self.run_remote(legacy, rollback="true")
+        self.assertEqual(result.returncode, 1)
+        record = self.records()[-1]
+        self.assertEqual((record["status"], record["server_head"]), ("refused_unverifiable_target", restored))
+        self.assertEqual(self.head(), restored)
+        self.assertEqual((self.state / "last-healthy-sha").read_text().strip(), restored)
+
+    def test_files_contract_matches_the_real_dashboard(self):
+        # The needles the server looks for must exist in the current dashboard sources.
+        remote = read(REMOTE_SCRIPT)
+        for rel in self.CONTRACT_FILES:
+            self.assertIn(rel, remote)
+        self.assertIn("refused_unverifiable_target", read(RUNNER_SCRIPT))
+
+
+class RemoteInterruptionTests(RemoteFixture):
+    """A deploy killed without its EXIT trap (SIGKILL/OOM) is recorded by the next deploy."""
+
+    def marker(self):
+        return self.state / "in-progress"
+
+    def kill_during_compose(self, sha):
+        # The docker stub SIGKILLs the deploy script itself while "compose up" runs.
+        self.stub("docker", 'if [ "$1" = "compose" ] && [[ " $* " == *" up "* ]]; then kill -KILL "$PPID"; fi\nexit 0\n')
+        result = self.run_remote(sha, event="push")
+        self.stub("docker", self.DOCKER_STUB)
+        return result
+
+    def test_successful_and_refused_deploys_leave_no_marker(self):
+        sha2 = self.push_commit("second")
+        self.assertEqual(self.run_remote(sha2).returncode, 0)
+        self.assertFalse(self.marker().exists())
+        self.assertEqual(self.run_remote(self.sha1).returncode, 1)  # refused_downgrade
+        self.assertFalse(self.marker().exists())
+
+    def test_sigkilled_deploy_is_recorded_as_interrupted_by_the_next_run(self):
+        sha2 = self.push_commit("second")
+        self.assertEqual(self.run_remote(sha2).returncode, 0)
+        sha3 = self.push_commit("third")
+        result = self.kill_during_compose(sha3)
+        self.assertEqual(result.returncode, -9)
+        self.assertEqual(len(self.records()), 1, "SIGKILL runs no trap, so no record yet")
+        pending = json.loads(self.marker().read_text())
+        self.assertEqual((pending["status"], pending["deployed_sha"], pending["previous_sha"]), ("interrupted", sha3, sha2))
+        self.assertEqual(self.head(), sha3)
+        self.assertEqual((self.state / "last-healthy-sha").read_text().strip(), sha2)
+        result = self.run_remote(sha3, event="push")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("recorded it as interrupted", result.stderr)
+        statuses = [(r["status"], r["deployed_sha"]) for r in self.records()]
+        self.assertEqual(statuses, [("healthy", sha2), ("interrupted", sha3), ("healthy", sha3)])
+        self.assertFalse(self.marker().exists())
+        self.assertEqual((self.state / "last-healthy-sha").read_text().strip(), sha3)
+
+    def test_corrupt_marker_refuses_before_any_change(self):
+        sha2 = self.push_commit("second")
+        self.state.mkdir()
+        for content in ("garbage", '{"status":"healthy","deployed_sha":"%s"}' % sha2, '{"status":"interrupted"}'):
+            with self.subTest(content=content):
+                self.marker().write_text(content + "\n")
+                result = self.run_remote(sha2)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("in-progress is corrupt", result.stderr)
+                self.assertEqual(self.head(), self.sha1)
+                self.assertEqual(self.records(), [])
+        self.assertEqual(self.stub_calls("docker"), [])
+
+
 class RemoteAncestryTests(RemoteFixture):
     def side_commit(self):
         """A commit pushed to another branch: neither ancestor nor descendant of main."""
@@ -1135,6 +1253,38 @@ class RemoteAncestryTests(RemoteFixture):
         self.assertNotRegex(remote, r'grep[^\n]*"ok"')
 
 
+class AcceptanceHarnessTests(unittest.TestCase):
+    """The opt-in end-to-end harness must stay opt-in and drive the real scripts."""
+
+    HARNESS = ROOT / "scripts/acceptance/dashboard-deploy-acceptance.sh"
+
+    def test_harness_refuses_to_run_without_opt_in(self):
+        result = subprocess.run(["bash", str(self.HARNESS)], env={"PATH": os.environ["PATH"]},
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("AIFT_ACCEPTANCE=1", result.stderr)
+
+    def test_harness_drives_the_real_workflow_steps(self):
+        text = read(self.HARNESS)
+        for step in ("validate", "resolve-target", "ssh-setup", "deploy", "summarize"):
+            self.assertIn(f"bash scripts/deploy-dashboard-runner.sh {step}", text)
+        for scenario in ("hostkey", "first", "forward", "rollback", "historical", "unhealthy", "concurrency", "interrupt"):
+            self.assertIn(f"sc_{scenario}()", text)
+        # Never real credentials or remote hosts.
+        self.assertNotRegex(text, r"secrets\.|VPS_HOST=(?!127\.0\.0\.1)")
+        self.assertIn("StrictModes=no", text)
+        self.assertNotIn("aifreedomtrust.com", text)
+
+    def test_harness_is_not_in_required_ci(self):
+        # CI may lint the harness but never runs it (it needs Docker and alters the machine).
+        for wf in (ROOT / ".github/workflows").glob("*.yml"):
+            text = read(wf)
+            self.assertNotIn("AIFT_ACCEPTANCE", text, wf.name)
+            for line in text.splitlines():
+                if "dashboard-deploy-acceptance.sh" in line:
+                    self.assertIn('"run": "shellcheck -S warning ', line, wf.name)
+
+
 class DashboardCommitExposureTests(unittest.TestCase):
     def test_image_build_arg_label_and_env(self):
         dockerfile = read(ROOT / "apps/aift-dashboard/Dockerfile")
@@ -1189,6 +1339,10 @@ class ScriptSyntaxAndDocsTests(unittest.TestCase):
             "/api/health",
             "last-healthy-sha",
             "running_commit",
+            "refused_unverifiable_target",
+            "interrupted",
+            "no automatic rollback",
+            "dashboard-deploy-acceptance.sh",
             "org.opencontainers.image.revision",
         ):
             self.assertIn(needle, doc)
