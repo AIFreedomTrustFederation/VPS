@@ -4,6 +4,7 @@ import path from 'path';
 import net from 'net';
 import { spawn } from 'child_process';
 import { NextRequest, NextResponse } from 'next/server';
+import { childProcessEnv, guardLocalExecRoute } from '@/lib/local-exec';
 import { readEngineRecords, upsertEngineRecord } from '@/lib/engine-records';
 
 type Profile = { id: string; source_id: string; repo: string; framework: string; package_manager: string; dev_command: string };
@@ -39,6 +40,9 @@ function devCommand(profile: Profile, port: number) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = guardLocalExecRoute(request);
+  if (blocked) return blocked;
+
   const body = await request.json().catch(() => ({}));
   const profileId = typeof body.profileId === 'string' ? body.profileId : '';
   const profile = readEngineRecords<Profile>('app-profiles').find((item) => item.id === profileId);
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest) {
   const logPath = logFile(profile.source_id);
   appendFileSync(logPath, `\n$ ${command.cmd} ${command.args.join(' ')}\n`);
   const out = openSync(logPath, 'a');
-  const child = spawn(command.cmd, command.args, { cwd: ready.workspace_path, detached: true, stdio: ['ignore', out, out], env: { ...process.env, PORT: String(port) } });
+  const child = spawn(command.cmd, command.args, { cwd: ready.workspace_path, detached: true, stdio: ['ignore', out, out], env: childProcessEnv({ PORT: String(port) }) });
   child.unref();
   closeSync(out);
 

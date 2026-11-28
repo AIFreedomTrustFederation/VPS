@@ -1,0 +1,16 @@
+name: Dashboard security preflight
+on:
+  pull_request:
+    paths:
+      - 'scripts/aift-dashboard-security-preflight.py'
+      - '.github/workflows/dashboard-security-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test private token provisioning with temporary files
+        run: python3 -B scripts/aift-dashboard-security-preflight.py --self-test
