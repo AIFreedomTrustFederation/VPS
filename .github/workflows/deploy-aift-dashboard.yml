@@ -6,20 +6,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: vps-dashboard-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy-dashboard:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/aift-dashboard
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -29,31 +34,103 @@ jobs:
       - name: Build before deploy
         run: npm run build
 
-      - name: Configure SSH
+      - name: Check deployment settings
+        id: deploy_settings
+        env:
+          VPS_HOST_VALUE: ${{ secrets.VPS_HOST }}
+          VPS_USER_VALUE: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY_VALUE: ${{ secrets.VPS_SSH_KEY }}
         run: |
+          if [ -n "$VPS_HOST_VALUE" ] && [ -n "$VPS_USER_VALUE" ] && [ -n "$VPS_SSH_KEY_VALUE" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Deployment skipped. Add VPS_HOST, VPS_USER, VPS_PORT, and VPS_SSH_KEY secrets."
+          fi
+
+      - name: Configure SSH
+        if: steps.deploy_settings.outputs.ready == 'true'
+        env:
+          VPS_SSH_KEY_VALUE: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS_VALUE: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          if [ -z "${VPS_KNOWN_HOSTS_VALUE}" ]; then
+            echo "Refusing deployment: VPS_KNOWN_HOSTS secret is missing" >&2
+            exit 1
+          fi
           mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/aift_vps_key
-          chmod 600 ~/.ssh/aift_vps_key
-          ssh-keyscan -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          umask 077
+          printf '%s\n' "$VPS_SSH_KEY_VALUE" > ~/.ssh/aift_vps_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS_VALUE" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/aift_vps_key ~/.ssh/known_hosts
 
       - name: Deploy dashboard to Sacramento Node 001
+        if: steps.deploy_settings.outputs.ready == 'true'
         working-directory: .
+        env:
+          VPS_HOST_VALUE: ${{ secrets.VPS_HOST }}
+          VPS_USER_VALUE: ${{ secrets.VPS_USER }}
+          VPS_PORT_VALUE: ${{ secrets.VPS_PORT }}
+          VPS_APP_PATH_VALUE: ${{ secrets.VPS_APP_PATH }}
         run: |
-          ssh -i ~/.ssh/aift_vps_key -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" <<'EOF'
           set -Eeuo pipefail
-          APP_DIR="${VPS_APP_PATH:-/root/VPS}"
+          APP_DIR="$VPS_APP_PATH_VALUE"
+          DEPLOY_SHA="$GITHUB_SHA"
+          if [ -z "$APP_DIR" ]; then
+            echo "Refusing deployment: VPS_APP_PATH secret is empty" >&2
+            exit 1
+          fi
+          if [[ ! "$APP_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
+            echo "Refusing deployment: VPS_APP_PATH must be an absolute path" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Refusing deployment: GITHUB_SHA is missing or not a 40-character hex SHA" >&2
+            exit 1
+          fi
+          ssh -i ~/.ssh/aift_vps_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -p "${VPS_PORT_VALUE:-22}" \
+            "$VPS_USER_VALUE@$VPS_HOST_VALUE" \
+            flock -w 1800 /var/lock/aift-dashboard-deploy.lock \
+            bash -s -- "$APP_DIR" "$DEPLOY_SHA" <<'EOF'
+          # begin-remote-deploy
+          set -Eeuo pipefail
+          APP_DIR="${1:-}"
+          DEPLOY_SHA="${2:-}"
+          if [ -z "$APP_DIR" ]; then
+            echo "Refusing deployment: VPS_APP_PATH is empty" >&2
+            exit 1
+          fi
           if [ ! -d "$APP_DIR/.git" ]; then
-            git clone https://github.com/AIFreedomTrustFederation/VPS.git "$APP_DIR"
+            echo "Refusing deployment: ${APP_DIR} is not a git repository" >&2
+            exit 1
           fi
           cd "$APP_DIR"
-          git pull --ff-only
-          # The runner built github.sha; fail closed if the remote checkout differs.
-          DEPLOY_SHA="${{ github.sha }}"
+          checkout_status=$(git status --porcelain --untracked-files=all) || {
+            echo "Refusing deployment: cannot inspect remote checkout" >&2
+            exit 1
+          }
+          if [ -n "$checkout_status" ]; then
+            echo "Refusing deployment: dirty checkout" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Refusing deployment: invalid commit SHA" >&2
+            exit 1
+          fi
+          git fetch origin -- "$DEPLOY_SHA" || {
+            echo "Refusing deployment: cannot fetch $DEPLOY_SHA from origin" >&2
+            exit 1
+          }
+          git checkout --detach "$DEPLOY_SHA"
           if [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]; then
             echo "Refusing deployment: remote revision differs from workflow commit $DEPLOY_SHA" >&2
             exit 1
           fi
-          # Matching HEAD alone does not prove the files Docker will build are unchanged.
           checkout_status=$(git status --porcelain --untracked-files=all) || {
             echo "Refusing deployment: cannot inspect remote checkout" >&2
             exit 1
@@ -62,6 +139,7 @@ jobs:
             echo "Refusing deployment: dirty checkout at verified commit" >&2
             exit 1
           fi
+          # end-remote-deploy
           mkdir -p /opt/aift/registry /opt/aift/logs
           [ -f /opt/aift/registry/nodes.yml ] || cp registry-examples/nodes.yml /opt/aift/registry/nodes.yml
           [ -f /opt/aift/registry/templates.yml ] || cp registry-examples/templates.yml /opt/aift/registry/templates.yml
