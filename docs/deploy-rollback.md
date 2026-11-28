@@ -17,6 +17,10 @@ the job summary and uploaded as the `vps-dashboard-deployment-record-<run id>` a
 * `refused_downgrade`: a normal deploy whose target does not descend from what is deployed
 * `refused_rollback_target`: a rollback target that is not an ancestor of `origin/main`
 * `refused_ancestry`: `git merge-base` could not decide, so the deploy refused
+* `refused_unverifiable_target`: the target predates the running-commit contract (see
+  [Commits before the running-commit contract](#commits-before-the-running-commit-contract)); nothing changed
+* `interrupted`: written by the *next* deploy for an earlier one that was killed before it could
+  record itself (see [Interrupted deploys](#interrupted-deploys))
 
 Refusals that happen before the server is touched (bad input, dirty or shallow tree, missing tool,
 unreadable state) leave no record. `previous_sha` is the checkout's `HEAD` immediately before the
@@ -36,6 +40,13 @@ tail -n 5 /var/lib/aift/dashboard-deploys/deployments.jsonl
 ```
 
 A corrupt `last-healthy-sha` (anything but one 40-character lowercase SHA) blocks deploys until fixed.
+
+There is deliberately **no automatic rollback**. An unhealthy deploy fails the job, keeps
+`last-healthy-sha` unchanged and prints the suggested target; a person then runs procedure A with
+that SHA (it goes through the same `production` approval). Automatic rollback was rejected because it
+would start a second unreviewed build in the middle of an incident, could itself fail or loop, and
+would hide the failure behind a green-looking state. The manual path is exercised end to end by
+`scripts/acceptance/dashboard-deploy-acceptance.sh` (scenario `unhealthy`).
 
 ## A. Redeploy a previous SHA with the workflow (preferred)
 
@@ -99,6 +110,35 @@ printf '%s\n' '{"timestamp_utc":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"h
 
 The checkout is left on a detached `HEAD` after any deploy or rollback. When you want the server on the
 branch again, with nothing running a deploy: `git checkout main && git pull --ff-only`.
+
+## Commits before the running-commit contract
+
+Deploys verify the running commit through the image label `org.opencontainers.image.revision` and the
+`commit` field of `/api/health`; both arrived in #51 (merge `41bbc057`). Older commits (for example
+the #50 merge `458dfe50`) cannot report their commit, so a deploy of one could never pass
+verification: before this check it rebuilt and replaced the running app, then failed as `unhealthy`
+after the full health budget. The server now inspects the target's `Dockerfile`, `compose.yml` and
+health route **before** checking it out and refuses with `refused_unverifiable_target`, leaving the
+checkout, the running container and `last-healthy-sha` untouched.
+
+If you really must run such a commit, use procedure B by hand and verify it yourself; it will not be
+recorded as verified and must not be written to `last-healthy-sha`.
+
+## Interrupted deploys
+
+* **Job cancelled or runner lost during the build** (ssh dropped): the server-side script gets a broken
+  pipe, stops, and records `failed`. The checkout may already be on the new SHA while the old container
+  keeps serving; `last-healthy-sha` is unchanged. Re-run the deploy (or roll back) to converge.
+* **Job cancelled after the image is built** (during `compose up` or health checks): the server-side
+  script can finish on its own and record `healthy` or `unhealthy` even though the job shows cancelled.
+  The server log is the source of truth; check it before re-running.
+* **Server-side script killed outright** (SIGKILL, OOM, reboot): no trap runs. Every deploy writes
+  `/var/lib/aift/dashboard-deploys/in-progress` before changing anything and removes it once its record
+  is appended. The next deploy finds the leftover marker and appends it to the log as `interrupted`
+  first. A corrupt marker blocks deploys until inspected.
+
+In every case the lock is released when the process exits and the next run starts from a clean
+checkout. These cases are exercised by the acceptance harness (scenario `interrupt`).
 
 ## C. When a deploy ends `unhealthy` or `failed`
 

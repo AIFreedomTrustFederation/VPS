@@ -144,7 +144,7 @@ record = json.loads(sys.argv[1])
 assert isinstance(record, dict)
 for key in ("deployed_sha", "previous_sha"):
     assert sha.fullmatch(record[key]), key
-assert record["status"] in ("healthy", "unhealthy", "failed", "target_mismatch", "refused_downgrade", "refused_ancestry", "refused_rollback_target")
+assert record["status"] in ("healthy", "unhealthy", "failed", "target_mismatch", "refused_downgrade", "refused_ancestry", "refused_rollback_target", "refused_unverifiable_target")
 last = record.get("last_healthy_before", "none")
 assert last == "none" or sha.fullmatch(last), "last_healthy_before"
 if record["status"] == "healthy":

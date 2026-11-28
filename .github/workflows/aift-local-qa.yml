@@ -56,7 +56,7 @@
         },
         {
           "name": "Lint dashboard deploy scripts",
-          "run": "shellcheck -S warning scripts/deploy-dashboard-remote.sh scripts/deploy-dashboard-runner.sh"
+          "run": "shellcheck -S warning scripts/deploy-dashboard-remote.sh scripts/deploy-dashboard-runner.sh scripts/acceptance/dashboard-deploy-acceptance.sh"
         },
         {
           "name": "Verify dashboard Docker context excludes credentials",
