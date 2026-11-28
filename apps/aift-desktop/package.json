@@ -10,7 +10,7 @@
     "test": "node --test main.test.cjs"
   },
   "dependencies": {
-    "electron": "^38.0.0"
+    "electron": "^45.4.1"
   },
   "devDependencies": {
     "electron-builder": "^26.0.0"
